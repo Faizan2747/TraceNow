@@ -1,0 +1,4125 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_1862238_tracenow.dm_test</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>dm_test</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var dm_test = Class.create();
+
+dm_test.prototype = {
+
+    initialize: function() {
+
+        this._migratedRecords     = {};
+        this._sysIdLookup         = {};
+        this._visited             = {};
+        this._cacheRefFields      = {};
+        this._cacheHierarchy      = {};
+        this._cacheNaturalKey     = {};
+        this._cacheUserNameExists = {};
+        this._activityStreamDone  = {};
+        this._auditRowsToFix      = [];
+
+        // NEW dynamic-discovery caches
+        this._cacheM2MDiscovery       = {};
+        this._cacheTaskRelDiscovery   = {};
+        this._cacheTablesReferencing  = {};
+        this._cacheDocIdRelations     = null;
+
+        this.CLEAN_RERUN = true;
+        this.DEBUG       = true;
+
+        
+        this.KEEP_CACHES_ACROSS_CALLS = false;
+
+       
+        this.FAST_MODE = false;
+        this.DEEP_RECURSION_ENABLED = false;
+        this.MAX_RELATED_DEPTH      = 1;
+        this.MAX_DEEP_RECORDS       = 500;
+
+        this.DEEP_RECURSE_TABLES = {
+         
+        };
+
+        this._deepStats = { migrated: 0, skipped: 0, capped: false };
+
+        this.REF_DEEP_RECURSE_ENABLED    = true;
+        this.REF_DEEP_RECURSE_ALL_TABLES = false;  /* task-derived only */
+        this.REF_DEEP_RECURSE_MAX_DEPTH  = 1;      /* one level of ref-deep-recurse */
+        this.REF_DEEP_RECURSE_TABLES = {
+            task:              true,
+            incident:          true,
+            problem:           true,
+            problem_task:      true,
+            change_request:    true,
+            change_task:       true,
+            sc_request:        true,
+            sc_req_item:       true,
+            sc_task:           true,
+            universal_request: true
+        };
+        this._refDeepDepth = 0;
+        this._refDeepDone = {};
+
+        this.USER_CHAIN = {
+            migrateGroupMemberships: false,   // sys_user_grmember
+            migrateRoles:            false,   // sys_user_has_role
+            managerChainDepth:       1        // 0=none, 1=direct, 2+=org chart
+        };
+        this.endTime      = 0;
+        this.durationMs   = 0;
+        this.durationText = '';
+
+        this.IDENTITY_FIELDS = {
+            caller_id:                "sys_user",
+            opened_by:                "sys_user",
+            closed_by:                "sys_user",
+            resolved_by:              "sys_user",
+            assigned_to:              "sys_user",
+            watch_list:               "sys_user",
+            additional_assignee_list: "sys_user",
+            assignment_group:         "sys_user_group",
+            manager:                  "sys_user"
+        };
+
+        this.SPECIAL_REF_FIELDS = {
+            service:           "cmdb_ci_service",
+            service_offering:  "service_offering",
+            contract:          "contract",
+            parent:            "task",
+            caller_id:         "sys_user",
+            opened_by:         "sys_user",
+            closed_by:         "sys_user",
+            resolved_by:       "sys_user",
+            assigned_to:       "sys_user",
+            assignment_group:  "sys_user_group",
+            manager:           "sys_user",
+            universal_request: "universal_request"
+        };
+
+        this.SKIP_TABLES = {
+            sys_user:          true,
+            sys_user_group:    true,
+            sys_user_role:     true,
+            sys_user_has_role: true,
+            sys_user_grmember: true,
+            cmn_department:    true,
+            cmn_location:      true,
+            core_company:      true,
+            sys_db_object:     true,
+            sys_dictionary:    true,
+            sys_choice:        true,
+            sys_scope:                  true,   /* the scope registry itself */
+            awa_service_channel:        true,   /* Advanced Work Assignment framework */
+            awa_service_channel_group:  true
+        };
+
+        this.NATURAL_KEY_TABLES = {
+            sys_user:        "user_name",
+            sys_user_group:  "name",
+            sys_db_object:   "name",
+            contract_sla:    "name",
+            cmn_schedule:    "name",
+            sys_choice:      null,
+            sys_dictionary:  null
+        };
+
+        this.AUTO_CREATE_NATURAL_KEY = true;
+
+        this.NATURAL_KEY_CREATE_FIELDS = {
+            sys_user: [
+                "user_name", "first_name", "last_name", "name", "email",
+                "title", "department", "company", "active", "phone",
+                "mobile_phone", "manager", "location"
+            ],
+            sys_user_group: [
+                "name", "description", "manager", "email",
+                "active", "type", "parent"
+            ],
+            sys_db_object: [],
+            contract_sla: [
+                "name", "type", "duration_type", "duration",
+                "schedule", "timezone", "pause_type", "active"
+            ],
+            cmn_schedule: [
+                "name", "document", "type", "time_zone"
+            ]
+        };
+
+        this.M2M_DEFINITIONS = [
+            {
+                table:  "task_rel_task",
+                fields: [
+                    { field: "parent", refTable: "task" },
+                    { field: "child",  refTable: "task" }
+                ]
+            }
+        ];
+        this.M2M_DISCOVERY = {
+
+            enabled: true,
+
+            /* Tables that LOOK like M2M but are handled elsewhere */
+            excludeTables: {
+                "task_sla":             true,   // insertSLAs
+                "sys_audit":            true,
+                "sys_audit_relation":   true,
+                "sys_journal_field":    true,
+                "sys_history_set":      true,
+                "sys_history_line":     true,
+                "sys_email":            true,
+                "sys_attachment":       true,
+                "sys_metadata":         true,
+                "sys_template":         true,
+                "sysapproval_approver": true,   // _migrateApprovalsRecursive
+                "metric_instance":      true,
+                "task_rel_task":        true    // M2M_DEFINITIONS
+            },
+            excludeRefTables: {
+                "sys_choice":     true,
+                "sys_dictionary": true,
+                "sys_db_object":  true
+            }
+        };
+        this.M2M_OVERRIDES = [
+            // {
+            //     table:        "task_outage",
+            //     taskField:    "task",
+            //     refField:     "cmdb_ci",
+            //     refTable:     "cmdb_ci",
+            //     primaryField: ""
+            // }
+        ];
+        this.RELATED_REFERENCE_FIELDS = [
+            {
+                name:    "Universal Request",
+                field:   "universal_request",
+                refTable: "universal_request",
+                reverseDirection: true,
+                enabled: true
+            }
+        ];
+        this.RELATIONSHIP_M2M_HINTS = [
+             { table: "u_universal_request_task", taskField: "task", refField: "universal_request" }
+        ];
+        this.M2M_RESOLVER_CONFIG = {
+
+            "_default": {
+                lookupField: "name",
+                safeFields:  [
+                    "short_description", "description",
+                    "active", "operational_status"
+                ]
+            },
+
+            "cmdb_ci": {
+                lookupField: "name",
+                safeFields:  [
+                    "sys_class_name", "asset_tag", "serial_number",
+                    "operational_status", "install_status",
+                    "category", "subcategory",
+                    "short_description", "comments", "discovery_source"
+                ]
+            },
+
+            "service_offering": {
+                lookupField: "name",
+                safeFields:  [
+                    "short_description", "operational_status",
+                    "service_classification", "owned_by"
+                ]
+            },
+
+            "cmdb_ci_service": {
+                lookupField: "name",
+                safeFields:  [
+                    "short_description", "operational_status", "version", "owned_by"
+                ]
+            }
+        };
+
+        this.stats    = { total: 0, inserted: 0, updated: 0, failed: 0 };
+        this.progress = { total: 0, processed: 0, percent: 0 };
+
+        this._operationCounted = {};
+
+        this.SOURCE_URL  = '';
+        this.SOURCE_USER = '';
+        this.SOURCE_PSWD = '';
+
+        this.MAX_RECURSION = 50;
+
+        this.executionLogs    = [];
+        this.currentRecordLog = {};
+
+    },
+    _isNoiseTable: function(tableName) {
+
+        if (!tableName) return true;
+        if (!this._cacheIsNoise) this._cacheIsNoise = {};
+        if (this._cacheIsNoise.hasOwnProperty(tableName))
+            return this._cacheIsNoise[tableName];
+
+        var t = String(tableName).toLowerCase();
+
+        /* Flow Designer variable storage — 500-2000 of these on modern instances */
+        var isNoise =
+            t.indexOf("var__m_")              === 0 ||
+            t.indexOf("sys_hub_")             === 0 ||
+            t.indexOf("sys_flow_")            === 0 ||
+            t.indexOf("ts_")                  === 0 ||
+            t.indexOf("v_")                   === 0 ||
+            t.indexOf("ecc_")                 === 0 ||
+            t.indexOf("sn_doc_task_")         === 0 ||
+            t.indexOf("sys_notification")     === 0 ||
+            t.indexOf("ui_notification")      === 0 ||
+            t.indexOf("sys_email_")           === 0 ||
+            t.indexOf("sys_outbound_")        === 0 ||
+            t.indexOf("sys_trigger")          === 0 ||
+            t.indexOf("sys_metric_")          === 0 ||
+            t.indexOf("sys_watermark")        === 0 ||
+            t.indexOf("sys_event")            === 0 ||
+            t.indexOf("sysauto")              === 0 ||
+            t.indexOf("text_search")          === 0 ||
+            t.indexOf("sys_translated")       === 0 ||
+            t.indexOf("sys_template_")        === 0 ||
+            t.indexOf("sys_metadata_")        === 0 ||
+            /* Action / flow / step storage */
+            t.indexOf("sn_action_status")     === 0 ||
+            t.indexOf("sn_plng_att_core")     === 0 ||
+            t.indexOf("sla_breakdown")        === 0 ||
+            t.indexOf("ml_predictor")         === 0 ||
+            t.indexOf("interaction_related")  === 0 ||
+            /^ecc_event\d/.test(t)            ||
+            t.indexOf("sys_app_")                === 0 ||  /* sys_app_hash_inventory, sys_app_scan_variable, sys_app_scan_payload */
+            t.indexOf("sn_actsub_")              === 0 ||  /* sn_actsub_activity, sn_actsub_subobject_stream */
+            t.indexOf("sys_generative_ai_")      === 0 || 
+            t.indexOf("sys_gen_ai_")             === 0 ||  /* sys_gen_ai_feature_mapping */
+            t.indexOf("sys_geocoding_")          === 0 ||  /* sys_geocoding_request */
+            t.indexOf("sys_unreferenced_")       === 0 ||  /* sys_unreferenced_preview */
+            t.indexOf("auth_server_")            === 0 ||  /* auth_server_connection */
+            t === "sys_activity"                          ||  /* platform activity feed */
+            t.indexOf("syslog_app_")             === 0 ||  /* syslog_app_scope */
+            t.indexOf("sn_rf_recommendation_") === 0 ||  /* sn_rf_recommendation_history */
+            t.indexOf("sys_processing_framework_") === 0 ||/* sys_processing_framework_job */
+            t.indexOf("sn_vsc_security_policy_") === 0 ||  /* sn_vsc_security_policy_notification, _execution_history */
+            t === "sys_mapplication"                      ||  /* platform applications map */
+            t.indexOf("sys_orchestrator_")       === 0 ||  /* sys_orchestrator_action */
+            t.indexOf("sys_package_dependency_") === 0 ||  /* sys_package_dependency_item */
+            t.indexOf("one_api_")                === 0 ||  /* one_api_service_plan_invocation */
+            t.indexOf("sys_upgrade_history_")    === 0 ||  /* sys_upgrade_history_log */
+            t === "sys_trace_context"                     ||  /* internal trace context */
+            /* sys_audit_relation OK - we handle that explicitly */
+            false;
+
+        this._cacheIsNoise[tableName] = isNoise;
+        return isNoise;
+    },
+
+    /* =====================================================
+       Atomic helper — writes _migratedRecords AND _sysIdLookup together.
+    ===================================================== */
+    _setMigrated: function(table, sourceSysId, targetSysId) {
+        if (!table || !sourceSysId || !targetSysId) return;
+        var key = table + "_" + sourceSysId;
+        this._migratedRecords[key] = targetSysId;
+        this._sysIdLookup[sourceSysId] = targetSysId;
+    },
+
+    _findMigratedKey: function(sourceSysId) {
+        if (!sourceSysId) return null;
+        return this._sysIdLookup.hasOwnProperty(sourceSysId) ? sourceSysId : null;
+    },
+
+    _remapStringRef: function(maybeSysId) {
+        if (!maybeSysId) return maybeSysId;
+        var s = String(maybeSysId).trim();
+        if (!/^[0-9a-f]{32}$/i.test(s)) return maybeSysId;
+        return this._sysIdLookup[s] || maybeSysId;
+    },
+
+    _remapAllSysIdFieldsInRow: function(row, skipFields) {
+
+        skipFields = skipFields || {};
+        var remapped = 0;
+
+        for (var f in row) {
+
+            if (!row.hasOwnProperty(f))   continue;
+            if (skipFields[f])             continue;
+            if (f === "sys_id"          ||
+                f === "sys_created_by"  ||
+                f === "sys_updated_by"  ||
+                f === "sys_created_on"  ||
+                f === "sys_updated_on") continue;
+
+            var v = row[f];
+            if (v && typeof v === "object" && v.value !== undefined) v = v.value;
+            if (typeof v !== "string") continue;
+
+            v = v.trim();
+            if (!/^[0-9a-f]{32}$/i.test(v)) continue;
+
+            if (this._sysIdLookup[v]) {
+                row[f] = this._sysIdLookup[v];
+                remapped++;
+            }
+        }
+        return remapped;
+    },
+
+    _resolveRefForRelated: function(refTable, sourceSysId, depth) {
+
+        if (!refTable || !sourceSysId) return '';
+        depth = depth || 1;
+
+        if (this._sysIdLookup[sourceSysId]) return this._sysIdLookup[sourceSysId];
+
+        var key = refTable + "_" + sourceSysId;
+        if (this._migratedRecords[key]) return this._migratedRecords[key];
+
+        if (this.SKIP_TABLES && this.SKIP_TABLES[refTable]) {
+
+            var grLocal = new GlideRecordSecure(refTable);
+            if (grLocal.get(sourceSysId)) {
+                this._setMigrated(refTable, sourceSysId, sourceSysId);
+                return sourceSysId;
+            }
+
+            if (this.NATURAL_KEY_TABLES.hasOwnProperty(refTable)) {
+                var nk = this._resolveByNaturalKey(refTable, sourceSysId);
+                if (nk) return nk;
+            }
+
+            return sourceSysId;
+        }
+
+        if (this.NATURAL_KEY_TABLES.hasOwnProperty(refTable)) {
+            var nkResolved = this._resolveByNaturalKey(refTable, sourceSysId);
+            return nkResolved || sourceSysId;
+        }
+
+        if (refTable === "sys_choice" || refTable === "sys_dictionary") return sourceSysId;
+
+        if (depth < this.MAX_RECURSION) {
+            var migrated = this.migrateWithDependencies(refTable, sourceSysId, depth);
+            return migrated || sourceSysId;
+        }
+
+        return sourceSysId;
+    },
+
+    migrateWithDependencies: function(table, sourceSysId, depth) {
+
+        table       = String(table).trim();
+        sourceSysId = String(sourceSysId).trim();
+        depth       = depth || 0;
+
+        if (!sourceSysId)               return '';
+        if (depth > this.MAX_RECURSION) return '';
+
+        if (depth > 0 && this.SKIP_TABLES && this.SKIP_TABLES[table]) {
+
+            var grSkip = new GlideRecordSecure(table);
+            if (grSkip.get(sourceSysId)) {
+                this._setMigrated(table, sourceSysId, sourceSysId);
+                return sourceSysId;
+            }
+
+            if (this.NATURAL_KEY_TABLES.hasOwnProperty(table)) {
+                var nkResolved = this._resolveByNaturalKey(table, sourceSysId);
+                var resolved   = nkResolved || sourceSysId;
+                this._setMigrated(table, sourceSysId, resolved);
+                return resolved;
+            }
+
+            this._setMigrated(table, sourceSysId, sourceSysId);
+            return sourceSysId;
+        }
+
+        if (depth > 0 && this.NATURAL_KEY_TABLES.hasOwnProperty(table)) {
+            var nkDep = this._resolveByNaturalKey(table, sourceSysId);
+            if (!nkDep && this.AUTO_CREATE_NATURAL_KEY) {
+                var srcNKRec = this.fetchSourceRecord(table, sourceSysId);
+                if (srcNKRec) nkDep = this._createNaturalKeyRecord(table, srcNKRec);
+            }
+            var nkResult = nkDep || sourceSysId;
+            this._setMigrated(table, sourceSysId, nkResult);
+            return nkResult;
+        }
+
+        if (table === "sys_choice" || table === "sys_dictionary") {
+            this._setMigrated(table, sourceSysId, sourceSysId);
+            return sourceSysId;
+        }
+
+        var key = table + "_" + sourceSysId;
+        if (this._migratedRecords[key]) return this._migratedRecords[key];
+        if (this._visited[key])         return this._migratedRecords[key] || '';
+
+        this._visited[key] = true;
+
+        var record = this.fetchSourceRecord(table, sourceSysId);
+        if (!record) return '';
+        var actualClass = this.normalizeRef(record.sys_class_name);
+
+        /* ★ v30: log class info for UR diagnosis */
+        if (table === "universal_request" || actualClass === "universal_request" ||
+            table === "task" && actualClass) {
+            this.logStep("  [UR-DIAG] migrateWithDependencies entered table='" + table +
+                          "' actualClass='" + actualClass + "' sysId=" + sourceSysId);
+        }
+
+        if (actualClass &&
+            actualClass !== table &&
+            this._tableExists(actualClass)) {
+
+            var chain = this._getTableHierarchy(actualClass);
+
+            /* ★ v30: log chain for UR diagnosis */
+            if (actualClass === "universal_request" || table === "universal_request") {
+                this.logStep("  [UR-DIAG] Class chain for '" + actualClass +
+                              "': [" + chain.join(", ") +
+                              "]  - indexOf('" + table + "') = " + chain.indexOf(table));
+            }
+
+            if (chain.indexOf(table) !== -1) {
+                /* actualClass is a subclass of `table` — refetch from there */
+                var betterRecord = this.fetchSourceRecord(actualClass, sourceSysId);
+                if (betterRecord) {
+                    this.logStep("  [UR-DIAG] Class refinement: " + table + " → " +
+                                  actualClass + " for " + sourceSysId);
+                    record = betterRecord;
+                    table  = actualClass;
+                    /* Update visited / cache key under the refined class */
+                    key = table + "_" + sourceSysId;
+                    this._visited[key] = true;
+                } else {
+                    this.logStep("  [UR-DIAG] ⚠ Class refinement wanted to switch to " +
+                                  actualClass + " but fetchSourceRecord returned null");
+                }
+            } else if (actualClass === "universal_request" || table === "universal_request") {
+                this.logStep("  [UR-DIAG] ⚠ Class refinement SKIPPED: '" + actualClass +
+                              "' is NOT a subclass of '" + table +
+                              "' according to class hierarchy");
+            }
+        }
+
+        var refFields = this._getCachedRefFields(table);
+
+        for (var special in this.SPECIAL_REF_FIELDS) {
+            var existsSpecial = false;
+            for (var iSp = 0; iSp < refFields.length; iSp++) {
+                if (refFields[iSp].field === special) { existsSpecial = true; break; }
+            }
+            if (!existsSpecial && record.hasOwnProperty(special)) {
+                refFields.unshift({
+                    field:    special,
+                    refTable: this.SPECIAL_REF_FIELDS[special]
+                });
+            }
+        }
+
+        for (var r = 0; r < refFields.length; r++) {
+
+            var rf = refFields[r];
+            if (!rf.refTable) continue;
+
+            var srcRef = this.normalizeRef(record[rf.field]);
+            if (!srcRef) continue;
+
+            try {
+
+                var targetRef;
+
+                if (this.SKIP_TABLES && this.SKIP_TABLES[rf.refTable]) {
+
+                    var grLocal2 = new GlideRecordSecure(rf.refTable);
+
+                    if (grLocal2.get(srcRef)) {
+                        targetRef = srcRef;
+                        this._setMigrated(rf.refTable, srcRef, srcRef);
+                    } else if (this.NATURAL_KEY_TABLES.hasOwnProperty(rf.refTable)) {
+                        targetRef = this._resolveByNaturalKey(rf.refTable, srcRef);
+                        if (!targetRef && rf.refTable === "sys_user") {
+                            var srcUserRec = this.fetchSourceRecord("sys_user", srcRef);
+                            if (srcUserRec) {
+                                targetRef = this._createNaturalKeyRecord("sys_user", srcUserRec);
+                            }
+                        }
+                    } else {
+                        targetRef = "";
+                    }
+
+                } else if (this.NATURAL_KEY_TABLES.hasOwnProperty(rf.refTable)) {
+
+                    targetRef = this._resolveByNaturalKey(rf.refTable, srcRef);
+                    if (!targetRef && this.AUTO_CREATE_NATURAL_KEY) {
+                        var srcNKRefRec = this.fetchSourceRecord(rf.refTable, srcRef);
+                        if (srcNKRefRec) {
+                            targetRef = this._createNaturalKeyRecord(rf.refTable, srcNKRefRec);
+                        }
+                    }
+
+                } else {
+                    targetRef = this.migrateWithDependencies(rf.refTable, srcRef, depth + 1);
+                }
+
+                if (targetRef) {
+                    record[rf.field] = String(targetRef);
+                    this.currentRecordLog.references_migrated++;
+                } else {
+                    record[rf.field] = "";
+                }
+
+            } catch (e) {
+                this.currentRecordLog.references_failed++;
+                this.currentRecordLog.errors.push("Reference failed: " + rf.field);
+                gs.warn("⚠ reference failed: " + table + "." + rf.field);
+            }
+        }
+
+        var targetId = this.safeUpsert(record, table, record.sys_id);
+        this._setMigrated(table, sourceSysId, targetId);
+        if (depth > 0 &&
+            targetId &&
+            this.REF_DEEP_RECURSE_ENABLED &&
+            (this.REF_DEEP_RECURSE_ALL_TABLES || this.REF_DEEP_RECURSE_TABLES[table])) {
+
+            if (this._refDeepDepth >= this.REF_DEEP_RECURSE_MAX_DEPTH) {
+                if (this.DEBUG) {
+                    this.logStep("  ⊘ ref-deep-recurse depth cap (" +
+                                  this.REF_DEEP_RECURSE_MAX_DEPTH + ") — skipping " +
+                                  table + "/" + sourceSysId);
+                }
+            } else {
+
+                var refDoneKey = "refdeep_" + table + "_" + sourceSysId;
+                if (!this._refDeepDone[refDoneKey] &&
+                    this._deepStats.migrated < this.MAX_DEEP_RECORDS) {
+
+                    this._refDeepDone[refDoneKey] = true;
+                    this._deepStats.migrated++;
+
+                    if (this.DEBUG) {
+                        this.logStep("  ↳ ref-deep-recurse: " + table + "/" + sourceSysId +
+                                      " (referenced from depth " + depth + ")");
+                    }
+
+                    this._refDeepDepth++;
+                    try {
+                        this._refDeepRecurseSuite(table, sourceSysId, targetId);
+                    } catch (eRD) {
+                        gs.warn("Ref-deep-recurse failed for " + table + "/" + sourceSysId + ": " + eRD);
+                    } finally {
+                        this._refDeepDepth--;
+                    }
+                }
+            }
+        }
+
+        return targetId;
+    },
+    _refDeepRecurseSuite: function(table, sourceId, targetId) {
+
+        /* Lateral task-task relationships */
+        this.migrateTaskRelationships(table, sourceId, targetId);
+
+        /* M2M related lists (Affected CIs/Groups/Locations…) */
+        this.migrateRelatedM2M(table, sourceId, targetId);
+
+        /* Universal Request and other relationship-style reference fields */
+        this.migrateRelatedReferenceFields(table, sourceId, targetId);
+
+        /* Document_id polymorphic relations (UR via parent_record etc.) */
+        this.migrateDocumentIdRelations(table, sourceId, targetId);
+
+        /* Standard related lists (recurses internally up to MAX_RELATED_DEPTH) */
+        this.migrateRelatedLists(table, sourceId, targetId, 1);
+
+        /* Attachments, SLAs */
+        this.copyAttachments(table, sourceId, targetId);
+        this.insertSLAs(sourceId, targetId);
+
+        /* Activity stream (audit, journal, etc.) — _activityStreamDone
+           guard prevents double-processing if main flow already did it */
+        this.migrateActivityStreamFor(table, sourceId, targetId);
+    },
+
+    _resolveByNaturalKey: function(table, sourceSysId) {
+
+        var cacheKey = table + "_" + sourceSysId;
+
+        if (this._cacheNaturalKey.hasOwnProperty(cacheKey) &&
+            this._cacheNaturalKey[cacheKey]) {
+            return this._cacheNaturalKey[cacheKey];
+        }
+
+        var lookupField = this.NATURAL_KEY_TABLES[table];
+        if (!lookupField) {
+            this._cacheNaturalKey[cacheKey] = '';
+            return '';
+        }
+
+        var srcRecord = this.fetchSourceRecord(table, sourceSysId);
+        if (!srcRecord) return '';
+
+        var lookupValue = this.normalizeRef(srcRecord[lookupField]);
+        if (!lookupValue) return '';
+
+        var gr = new GlideRecordSecure(table);
+        gr.addQuery(lookupField, lookupValue);
+        gr.setLimit(1);
+        gr.query();
+
+        if (gr.next()) {
+            var existingId = gr.getUniqueValue();
+            this._cacheNaturalKey[cacheKey] = existingId;
+            this._setMigrated(table, sourceSysId, existingId);
+            this.logStep("Resolved " + table + " by " + lookupField + "='" + lookupValue + "'");
+
+            /* Fire user-chain on sys_user resolutions (manager + opt-in extras) */
+            if (table === "sys_user") {
+                try { this._processUserChain(sourceSysId, existingId, 0); }
+                catch (eUC) { gs.warn("User chain failed: " + eUC); }
+            }
+
+            return existingId;
+        }
+
+        if (!this.AUTO_CREATE_NATURAL_KEY) {
+            this._cacheNaturalKey[cacheKey] = '';
+            return '';
+        }
+
+        var createdId = this._createNaturalKeyRecord(table, srcRecord);
+        if (createdId) this._cacheNaturalKey[cacheKey] = createdId;
+
+        /* Fire user-chain on freshly-created users too */
+        if (createdId && table === "sys_user") {
+            try { this._processUserChain(sourceSysId, createdId, 0); }
+            catch (eUC2) { gs.warn("User chain failed: " + eUC2); }
+        }
+
+        return createdId;
+    },
+
+    _createNaturalKeyRecord: function(table, srcRecord) {
+
+        var allowedFields = this.NATURAL_KEY_CREATE_FIELDS[table];
+        if (!allowedFields || allowedFields.length === 0) return '';
+
+        var srcSysId = this.normalizeRef(srcRecord.sys_id);
+
+        var newGr = new GlideRecordSecure(table);
+        newGr.initialize();
+        for (var i = 0; i < allowedFields.length; i++) {
+
+            var f = allowedFields[i];
+            if (!newGr.isValidField(f)) continue;
+
+            var v = srcRecord[f];
+            if (v && typeof v === "object" && v.value !== undefined) v = v.value;
+            if (Array.isArray(v) || v === undefined || v === null) continue;
+
+            if (f === "manager") {
+                if (v) {
+                    var resolvedMgr = this._resolveByNaturalKey("sys_user", v);
+                    if (resolvedMgr) newGr.setValue("manager", resolvedMgr);
+                }
+                continue;
+            }
+
+            if (f === "parent") {
+                if (v) {
+                    var resolvedParent = this._resolveByNaturalKey("sys_user_group", v);
+                    if (resolvedParent) newGr.setValue("parent", resolvedParent);
+                }
+                continue;
+            }
+
+            try { newGr.setValue(f, v); }
+            catch (eSet) { gs.warn("Auto-create field failed: " + table + "." + f); }
+        }
+
+        try {
+            var newId = newGr.insert();
+
+            if (newId && srcSysId) {
+                this._setMigrated(table, srcSysId, newId);
+                this._cacheNaturalKey[table + "_" + srcSysId] = newId;
+            }
+
+            if (newId && table === "sys_user") {
+                try {
+                    var fix = new GlideRecordSecure("sys_user");
+                    if (fix.get(newId)) {
+                        var first = srcRecord.first_name;
+                        var last  = srcRecord.last_name;
+                        var name  = srcRecord.name;
+                        if (first && typeof first === "object") first = first.value;
+                        if (last  && typeof last  === "object") last  = last.value;
+                        if (name  && typeof name  === "object") name  = name.value;
+                        if (!name) name = (first || "") + " " + (last || "");
+                        if (first) fix.setValue("first_name", first);
+                        if (last)  fix.setValue("last_name",  last);
+                        if (name)  fix.setValue("name",       name.trim());
+                        fix.setValue("active", true);
+                        fix.update();
+                    }
+                } catch (ignore) {}
+            }
+
+            return newId || '';
+
+        } catch (eInsert) {
+            gs.warn("Auto-create failed for " + table);
+            return '';
+        }
+    },
+    _processUserChain: function(srcUserId, targetUserId, depth) {
+
+        if (!srcUserId || !targetUserId) return;
+
+        depth = depth || 0;
+
+        var chainKey = "userchain_" + srcUserId;
+        if (this._visited[chainKey]) return;
+        this._visited[chainKey] = true;
+
+        /* ---------- Manager chain (depth-capped) ---------- */
+        if (this.USER_CHAIN.managerChainDepth > depth) {
+
+            try {
+                var srcUser = this.fetchSourceRecord("sys_user", srcUserId);
+                if (srcUser) {
+                    var srcMgr = this.normalizeRef(srcUser.manager);
+                    if (srcMgr && srcMgr !== srcUserId) {
+                        var newMgr = this._resolveByNaturalKey("sys_user", srcMgr);
+                        if (newMgr) {
+                            /* Re-assert manager link on the migrated user */
+                            var fix = new GlideRecordSecure("sys_user");
+                            if (fix.get(targetUserId) &&
+                                this.normalizeRef(fix.getValue("manager")) !== newMgr) {
+                                fix.setValue("manager", newMgr);
+                                fix.update();
+                            }
+                            /* Recurse if depth allows */
+                            this._processUserChain(srcMgr, newMgr, depth + 1);
+                        }
+                    }
+                }
+            } catch (eM) {
+                gs.warn("Manager chain failed for user " + srcUserId + ": " + eM);
+            }
+        }
+
+        /* ---------- Group memberships (OPT-IN, dangerous) ---------- */
+        if (this.USER_CHAIN.migrateGroupMemberships) {
+            this._migrateUserGroupMemberships(srcUserId, targetUserId);
+        }
+
+        /* ---------- Role grants (OPT-IN, very dangerous) ---------- */
+        if (this.USER_CHAIN.migrateRoles) {
+            this._migrateUserRoles(srcUserId, targetUserId);
+        }
+    },
+    _migrateUserGroupMemberships: function(srcUserId, targetUserId) {
+
+        var rows = this.fetchChildren("sys_user_grmember", "user", "", srcUserId);
+        if (rows.length === 0) return;
+
+        this.logStep("  → User group memberships: " + rows.length + " row(s) for user " + srcUserId);
+
+        var migrated = 0;
+        for (var i = 0; i < rows.length; i++) {
+
+            var row = rows[i];
+
+            try {
+                var srcGroup = this.normalizeRef(row.group);
+                if (!srcGroup) continue;
+
+                var newGroup = this._resolveByNaturalKey("sys_user_group", srcGroup);
+                if (!newGroup) continue;
+
+                /* Dedup */
+                var dup = new GlideRecordSecure("sys_user_grmember");
+                dup.addQuery("user",  targetUserId);
+                dup.addQuery("group", newGroup);
+                dup.setLimit(1);
+                dup.query();
+                if (dup.next()) continue;
+
+                var newGr = new GlideRecordSecure("sys_user_grmember");
+                newGr.initialize();
+                newGr.setValue("user",  targetUserId);
+                newGr.setValue("group", newGroup);
+
+                if (newGr.insert()) migrated++;
+
+            } catch (e) {
+                gs.warn("Group membership migration failed: " + e);
+            }
+        }
+
+        this.logStep("  Group memberships migrated: " + migrated);
+    },
+    _migrateUserRoles: function(srcUserId, targetUserId) {
+
+        var rows = this.fetchChildren("sys_user_has_role", "user", "", srcUserId);
+        if (rows.length === 0) return;
+
+        this.logStep("  → User role grants: " + rows.length + " row(s) for user " + srcUserId);
+
+        var migrated = 0;
+        for (var i = 0; i < rows.length; i++) {
+
+            var row = rows[i];
+
+            try {
+                var srcRole = this.normalizeRef(row.role);
+                if (!srcRole) continue;
+                var srcRoleRec = this.fetchSourceRecord("sys_user_role", srcRole);
+                if (!srcRoleRec) continue;
+                var roleName = this.normalizeRef(srcRoleRec.name);
+                if (!roleName) continue;
+
+                var roleQuery = new GlideRecordSecure("sys_user_role");
+                roleQuery.addQuery("name", roleName);
+                roleQuery.setLimit(1);
+                roleQuery.query();
+                if (!roleQuery.next()) {
+                    gs.warn("⚠ Role not found on target: " + roleName + " — skipping grant");
+                    continue;
+                }
+                var newRole = roleQuery.getUniqueValue();
+
+                /* Dedup */
+                var dup = new GlideRecordSecure("sys_user_has_role");
+                dup.addQuery("user", targetUserId);
+                dup.addQuery("role", newRole);
+                dup.setLimit(1);
+                dup.query();
+                if (dup.next()) continue;
+
+                var newGr = new GlideRecordSecure("sys_user_has_role");
+                newGr.initialize();
+                newGr.setValue("user", targetUserId);
+                newGr.setValue("role", newRole);
+                newGr.setValue("granted_by", targetUserId);   // attribute the grant
+                newGr.setValue("inherited",  false);
+
+                if (newGr.insert()) migrated++;
+
+            } catch (e) {
+                gs.warn("Role migration failed: " + e);
+            }
+        }
+
+        this.logStep("  Role grants migrated: " + migrated);
+    },
+
+    fetchSourceRecord: function(table, sysId) {
+
+        if (!table || !sysId) return null;
+        if (!this._cacheSourceRecord) this._cacheSourceRecord = {};
+        var ck = String(table).trim() + "::" + String(sysId).trim();
+        if (this._cacheSourceRecord.hasOwnProperty(ck)) {
+            return this._cacheSourceRecord[ck];
+        }
+
+        var api     = new sn_ws.RESTMessageV2();
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/" + String(table).trim() +
+            "/" + String(sysId).trim() +
+            "?sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) {
+            this._cacheSourceRecord[ck] = null;
+            return null;
+        }
+
+        var result = JSON.parse(response.getBody()).result;
+        this._cacheSourceRecord[ck] = result;
+        return result;
+    },
+
+    _getTableHierarchy: function(table) {
+
+        if (this._cacheHierarchy[table]) return this._cacheHierarchy[table];
+
+        var chain   = [table];
+        var current = table;
+        var safety  = 0;
+
+        while (current && safety++ < 20) {
+
+            var api     = new sn_ws.RESTMessageV2();
+            var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+
+            api.setEndpoint(
+                baseUrl +
+                "/api/now/table/sys_db_object" +
+                "?sysparm_query=" + encodeURIComponent("name=" + current) +
+                "&sysparm_fields=name,super_class" +
+                "&sysparm_limit=1" +
+                "&sysparm_display_value=false"
+            );
+            api.setHttpMethod("GET");
+            api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+            var resp = api.execute();
+            if (resp.getStatusCode() != 200) break;
+
+            var data = JSON.parse(resp.getBody());
+            if (!data.result || data.result.length === 0) break;
+
+            var superClassId = this.normalizeRef(data.result[0].super_class);
+            if (!superClassId) break;
+
+            var lookup = new sn_ws.RESTMessageV2();
+            lookup.setEndpoint(
+                baseUrl +
+                "/api/now/table/sys_db_object/" + superClassId +
+                "?sysparm_fields=name&sysparm_display_value=false"
+            );
+            lookup.setHttpMethod("GET");
+            lookup.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+            var lookupResp = lookup.execute();
+            if (lookupResp.getStatusCode() != 200) break;
+
+            var lookupData = JSON.parse(lookupResp.getBody());
+            if (!lookupData.result || !lookupData.result.name) break;
+
+            current = String(lookupData.result.name).trim();
+            if (!current || chain.indexOf(current) !== -1) break;
+            chain.push(current);
+        }
+
+        this._cacheHierarchy[table] = chain;
+        return chain;
+    },
+
+    getReferenceFields: function(table) {
+
+        var baseUrl       = this.SOURCE_URL.replace(/\/+$/, '');
+        var refs          = [];
+        var seen          = {};
+        var tablesToCheck = this._getTableHierarchy(table);
+
+        for (var t = 0; t < tablesToCheck.length; t++) {
+
+            var tbl = tablesToCheck[t];
+            var api = new sn_ws.RESTMessageV2();
+
+            api.setEndpoint(
+                baseUrl +
+                "/api/now/table/sys_dictionary" +
+                "?sysparm_query=" + encodeURIComponent("name=" + tbl + "^internal_type=reference") +
+                "&sysparm_fields=element,reference&sysparm_display_value=false"
+            );
+            api.setHttpMethod("GET");
+            api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+            var res = api.execute();
+            if (res.getStatusCode() != 200) continue;
+
+            var data = JSON.parse(res.getBody());
+
+            for (var i = 0; i < data.result.length; i++) {
+                var field    = data.result[i].element;
+                var ref      = data.result[i].reference;
+                var refTable = (typeof ref === "object") ? ref.value : ref;
+
+                if (!field || !refTable) continue;
+                if (seen[field]) continue;
+
+                seen[field] = true;
+                refs.push({ field: field, refTable: refTable });
+            }
+        }
+
+        return refs;
+    },
+    _fetchTablesReferencing: function(targetTable) {
+
+        if (this._cacheTablesReferencing[targetTable])
+            return this._cacheTablesReferencing[targetTable];
+
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var api     = new sn_ws.RESTMessageV2();
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/sys_dictionary" +
+            "?sysparm_query=" + encodeURIComponent("internal_type=reference^reference=" + targetTable) +
+            "&sysparm_fields=name,element&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) {
+            this._cacheTablesReferencing[targetTable] = [];
+            return [];
+        }
+
+        var rows = JSON.parse(response.getBody()).result || [];
+        var out  = [];
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].name && rows[i].element) {
+                out.push({ name: rows[i].name, element: rows[i].element });
+            }
+        }
+
+        this._cacheTablesReferencing[targetTable] = out;
+        return out;
+    },
+    _discoverDocumentIdRelations: function() {
+
+        if (this._cacheDocIdRelations) return this._cacheDocIdRelations;
+
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var api     = new sn_ws.RESTMessageV2();
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/sys_dictionary" +
+            "?sysparm_query=" + encodeURIComponent("internal_type=document_id") +
+            "&sysparm_fields=name,element" +
+            "&sysparm_limit=10000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) {
+            this._cacheDocIdRelations = [];
+            return [];
+        }
+
+        var rows = JSON.parse(response.getBody()).result || [];
+        var excludedTables = {
+            sys_audit:               true,
+            sys_audit_relation:      true,
+            sys_attachment:          true,
+            sys_attachment_doc:      true,
+            sys_journal_field:       true,
+            sys_history_set:         true,
+            sys_history_line:        true,
+            sys_email:               true,
+            sys_metadata:            true,
+            sys_template:            true,
+            sys_relationship:        true,
+            metric_instance:         true,
+            sys_translated:          true,
+            sys_choice:              true,
+            sys_dictionary:          true,
+            sys_db_object:           true,
+            /* Runtime/notification — DO NOT migrate */
+            sys_notification:        true,
+            sys_notification_execution: true,
+            ui_notification_inbox:   true,
+            sys_notification_route:  true,
+            sys_watermark:           true,
+            sys_event:               true,
+            sys_outbound_message:    true,
+            sys_email_outbound:      true,
+            sys_trigger:             true,
+            sysauto_script:          true,
+            sysauto:                 true,
+            ts_index_2:              true,
+            ts_query:                true,
+            text_search_group:       true,
+            v_event:                 true,
+            sys_metric:              true,
+            sys_metric_event:        true,
+            sysrule_view:            true
+        };
+        var filtered = [];
+        var tableSet    = {};
+        var elementSet  = {};
+
+        for (var i = 0; i < rows.length; i++) {
+
+            var tableName = rows[i].name;
+            var fieldName = rows[i].element;
+
+            if (!tableName || !fieldName)        continue;
+            if (excludedTables[tableName])       continue;
+            if (this.SKIP_TABLES[tableName])     continue;
+            if (this._isNoiseTable(tableName))   continue;   /* ★ THE FIX */
+
+            /* Companion field candidates (same as _guessTableNameField) */
+            var candidates = [
+                fieldName + "_table",
+                fieldName + "_name",
+                "table_name",
+                "tablename",
+                "parent_table",
+                "target_table",
+                "document_table"
+            ];
+            if (fieldName === "documentkey")    candidates.unshift("tablename");
+            if (fieldName === "table_sys_id")   candidates.unshift("table_name");
+            if (fieldName === "element_id")     candidates.unshift("name");
+            if (fieldName === "parent_record")  candidates.unshift("parent_table");
+            if (fieldName === "target")         candidates.unshift("target_table");
+
+            filtered.push({
+                tableName:  tableName,
+                fieldName:  fieldName,
+                candidates: candidates
+            });
+            tableSet[tableName] = true;
+            for (var cI = 0; cI < candidates.length; cI++) {
+                elementSet[candidates[cI]] = true;
+            }
+        }
+        var tableList = [];
+        for (var tk in tableSet) if (tableSet.hasOwnProperty(tk)) tableList.push(tk);
+
+        var elementList = [];
+        for (var el in elementSet) if (elementSet.hasOwnProperty(el)) elementList.push(el);
+
+        var foundKeys = {};
+        var chunkSize = 80;
+
+        if (tableList.length > 0 && elementList.length > 0) {
+
+            var elementInClause = "elementIN" + elementList.join(",");
+
+            for (var cs = 0; cs < tableList.length; cs += chunkSize) {
+
+                var tableChunk = tableList.slice(cs, cs + chunkSize);
+                var tableInClause = "nameIN" + tableChunk.join(",");
+
+                var probeApi = new sn_ws.RESTMessageV2();
+                probeApi.setEndpoint(
+                    baseUrl +
+                    "/api/now/table/sys_dictionary" +
+                    "?sysparm_query=" + encodeURIComponent(tableInClause + "^" + elementInClause) +
+                    "&sysparm_fields=name,element" +
+                    "&sysparm_limit=50000" +
+                    "&sysparm_display_value=false"
+                );
+                probeApi.setHttpMethod("GET");
+                probeApi.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+                var probeResp = probeApi.execute();
+                if (probeResp.getStatusCode() != 200) continue;
+
+                var probeRows = JSON.parse(probeResp.getBody()).result || [];
+                for (var pr = 0; pr < probeRows.length; pr++) {
+                    foundKeys[probeRows[pr].name + "::" + probeRows[pr].element] = true;
+                }
+            }
+        }
+
+        var out = [];
+
+        for (var f = 0; f < filtered.length; f++) {
+
+            var ent = filtered[f];
+            var tableNameField = "";
+
+            /* Pick the first candidate found in the dictionary */
+            for (var cc = 0; cc < ent.candidates.length; cc++) {
+                if (foundKeys[ent.tableName + "::" + ent.candidates[cc]]) {
+                    tableNameField = ent.candidates[cc];
+                    break;
+                }
+            }
+
+            out.push({
+                childTable:     ent.tableName,
+                refField:       ent.fieldName,
+                tableNameField: tableNameField
+            });
+            if (!this._cacheGuessTableField) this._cacheGuessTableField = {};
+            this._cacheGuessTableField[ent.tableName + "::" + ent.fieldName] = tableNameField;
+        }
+
+        this._cacheDocIdRelations = out;
+
+        if (this.DEBUG) {
+            this.logStep("Document_id relations discovered: " + out.length);
+        }
+
+        return out;
+    },
+    _guessTableNameField: function(tableName, docIdField) {
+
+        if (!this._cacheGuessTableField) this._cacheGuessTableField = {};
+        var ck = tableName + "::" + docIdField;
+        if (this._cacheGuessTableField.hasOwnProperty(ck)) {
+            return this._cacheGuessTableField[ck];
+        }
+
+        /* Try common explicit patterns first */
+        var candidates = [
+            docIdField + "_table",
+            docIdField + "_name",
+            "table_name",
+            "tablename",
+            "parent_table",
+            "target_table",
+            "document_table"
+        ];
+
+        /* Special cases */
+        if (docIdField === "documentkey")    candidates.unshift("tablename");
+        if (docIdField === "table_sys_id")   candidates.unshift("table_name");
+        if (docIdField === "element_id")     candidates.unshift("name");
+        if (docIdField === "parent_record")  candidates.unshift("parent_table");
+        if (docIdField === "target")         candidates.unshift("target_table");
+
+        /* Probe the dictionary on the SOURCE for any of these as string fields */
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var clauses = [];
+        for (var i = 0; i < candidates.length; i++) {
+            clauses.push("element=" + candidates[i]);
+        }
+
+        var api = new sn_ws.RESTMessageV2();
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/sys_dictionary" +
+            "?sysparm_query=" + encodeURIComponent(
+                "name=" + tableName + "^(" + clauses.join("^OR") + ")"
+            ) +
+            "&sysparm_fields=element,internal_type" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var resp = api.execute();
+        if (resp.getStatusCode() != 200) {
+            this._cacheGuessTableField[ck] = '';
+            return '';
+        }
+
+        var found = JSON.parse(resp.getBody()).result || [];
+
+        /* Prefer string/sys_class_name/table-named types in candidate order */
+        for (var c = 0; c < candidates.length; c++) {
+            for (var f = 0; f < found.length; f++) {
+                if (found[f].element === candidates[c]) {
+                    this._cacheGuessTableField[ck] = candidates[c];
+                    return candidates[c];
+                }
+            }
+        }
+
+        this._cacheGuessTableField[ck] = '';
+        return '';
+    },
+    _discoverM2MTables: function(parentTable) {
+
+        if (!this.M2M_DISCOVERY.enabled) return [].concat(this.M2M_OVERRIDES || []);
+
+        var cacheKey = "m2m_" + parentTable;
+        if (this._cacheM2MDiscovery[cacheKey])
+            return this._cacheM2MDiscovery[cacheKey];
+
+        var parentChain    = this._getTableHierarchy(parentTable);
+        var inParentChain  = {};
+        for (var p = 0; p < parentChain.length; p++) inParentChain[parentChain[p]] = true;
+
+        var discovered = [];
+        var seenKey    = {};
+
+        for (var ch = 0; ch < parentChain.length; ch++) {
+
+            var parent     = parentChain[ch];
+            var candidates = this._fetchTablesReferencing(parent);
+
+            /* Group ref fields by candidate table */
+            var byTable = {};
+            for (var i = 0; i < candidates.length; i++) {
+                var t = candidates[i].name;
+                if (!byTable[t]) byTable[t] = [];
+                byTable[t].push({ field: candidates[i].element, refTable: parent });
+            }
+
+            for (var tableName in byTable) {
+
+                if (this.M2M_DISCOVERY.excludeTables[tableName]) continue;
+                if (this.SKIP_TABLES[tableName])                 continue;
+                if (this._isNoiseTable(tableName))               continue;   /* ★ v25 */
+
+                /* Skip task-derived child tables — they're full records, not M2M */
+                if (this._isTaskDerived(tableName)) continue;
+
+                /* Get all reference fields on the candidate table */
+                var allRefs = this.getReferenceFields(tableName);
+                if (allRefs.length < 2) continue;
+                if (allRefs.length > 4) continue;
+
+                var taskFieldDef = byTable[tableName][0];
+                var taskField    = taskFieldDef.field;
+
+                /* Each "other" reference field becomes one M2M entry */
+                for (var k = 0; k < allRefs.length; k++) {
+
+                    var ref = allRefs[k];
+                    if (ref.field === taskField)                                continue;
+                    if (inParentChain[ref.refTable])                            continue;
+                    if (this.M2M_DISCOVERY.excludeRefTables[ref.refTable])      continue;
+                    if (this.SKIP_TABLES[ref.refTable])                         continue;
+
+                    var dedupKey = tableName + "::" + taskField + "::" + ref.field;
+                    if (seenKey[dedupKey]) continue;
+                    seenKey[dedupKey] = true;
+
+                    discovered.push({
+                        name:         tableName + "/" + ref.field,
+                        table:        tableName,
+                        taskField:    taskField,
+                        refField:     ref.field,
+                        refTable:     ref.refTable,
+                        primaryField: this._guessPrimaryFieldOnParent(parentTable, ref.refTable)
+                    });
+                }
+            }
+        }
+
+        /* Apply explicit overrides last (overrides win on dedup-key collision) */
+        var overrides = this.M2M_OVERRIDES || [];
+        for (var o = 0; o < overrides.length; o++) {
+            var ov = overrides[o];
+            if (!ov.table || !ov.taskField || !ov.refField) continue;
+            var ovKey = ov.table + "::" + ov.taskField + "::" + ov.refField;
+            if (!seenKey[ovKey]) {
+                seenKey[ovKey] = true;
+                discovered.push({
+                    name:         ov.name || ov.table + "/" + ov.refField,
+                    table:        ov.table,
+                    taskField:    ov.taskField,
+                    refField:     ov.refField,
+                    refTable:     ov.refTable,
+                    primaryField: ov.primaryField || ''
+                });
+            }
+        }
+
+        this._cacheM2MDiscovery[cacheKey] = discovered;
+
+        if (this.DEBUG) {
+            this.logStep("M2M discovery for " + parentTable + " found " + discovered.length + " entries:");
+            for (var d = 0; d < discovered.length; d++) {
+                this.logStep("  • " + discovered[d].table +
+                             " (" + discovered[d].taskField + " → " +
+                             discovered[d].refField + " → " + discovered[d].refTable + ")");
+            }
+        }
+
+        return discovered;
+    },
+    _guessPrimaryFieldOnParent: function(parentTable, refTable) {
+
+        var refs = this._getCachedRefFields(parentTable);
+        for (var i = 0; i < refs.length; i++) {
+            if (refs[i].refTable === refTable) return refs[i].field;
+        }
+
+        /* Common fallbacks */
+        if (refTable === "cmdb_ci")         return "cmdb_ci";
+        if (refTable === "service_offering") return "service_offering";
+
+        return '';
+    },
+    _discoverTaskRelationships: function(parentTable) {
+
+        if (this._cacheTaskRelDiscovery[parentTable])
+            return this._cacheTaskRelDiscovery[parentTable];
+
+        var allRefs = this._getCachedRefFields(parentTable);
+        var taskRels = [];
+
+        for (var i = 0; i < allRefs.length; i++) {
+            var ref = allRefs[i];
+            if (!ref.refTable) continue;
+            if (ref.refTable === "task" || this._isTaskDerived(ref.refTable)) {
+                taskRels.push({ field: ref.field, table: ref.refTable });
+            }
+        }
+
+        this._cacheTaskRelDiscovery[parentTable] = taskRels;
+        return taskRels;
+    },
+
+    discoverRelatedLists: function(parentTable) {
+
+        var rel  = [];
+        var seen = {};
+        var allRefs   = [];
+        var parentChain = this._getTableHierarchy(parentTable);
+        for (var ch = 0; ch < parentChain.length; ch++) {
+            var hits = this._fetchTablesReferencing(parentChain[ch]);
+            for (var hh = 0; hh < hits.length; hh++) {
+                allRefs.push(hits[hh]);
+            }
+        }
+
+        /* Pre-compute the M2M tables so we can skip them here */
+        var m2mTables = {};
+        var discovered = this._discoverM2MTables(parentTable);
+        for (var d = 0; d < discovered.length; d++) m2mTables[discovered[d].table] = true;
+
+        for (var i = 0; i < allRefs.length; i++) {
+
+            var childTable = allRefs[i].name;
+            var refField   = allRefs[i].element;
+
+            if (!childTable || !refField) continue;
+
+            if (childTable === "sys_dictionary" ||
+                childTable === "sys_db_object"  ||
+                childTable === "sys_choice")    continue;
+
+            /* ★ v25: skip flow-runtime / notification noise */
+            if (this._isNoiseTable(childTable)) continue;
+
+            var isM2M = false;
+            for (var m = 0; m < this.M2M_DEFINITIONS.length; m++) {
+                if (this.M2M_DEFINITIONS[m].table === childTable) { isM2M = true; break; }
+            }
+            if (isM2M) continue;
+
+            /* Skip M2M tables driven by dynamic discovery */
+            if (m2mTables[childTable]) continue;
+
+            var key = childTable + "_" + refField;
+            if (seen[key]) continue;
+            seen[key] = true;
+
+            rel.push({ childTable: childTable, refField: refField });
+        }
+
+        this._addRelatedList(rel, seen, "sys_audit",         "documentkey");
+        this._addRelatedList(rel, seen, "sys_journal_field", "element_id");
+        this._addRelatedList(rel, seen, "task_sla",          "task");
+        this._addRelatedList(rel, seen, "metric_instance",   "id");
+
+        if (this.DEBUG) {
+            this.logStep("Related lists discovered for " + parentTable + ": " + rel.length);
+            for (var r2 = 0; r2 < rel.length; r2++) {
+                this.logStep("  • " + rel[r2].childTable + " (via " + rel[r2].refField + ")");
+            }
+        }
+
+        return rel;
+    },
+
+    _addRelatedList: function(rel, seen, table, field) {
+        var key = table + "_" + field;
+        if (seen[key]) return;
+        seen[key] = true;
+        rel.push({ childTable: table, refField: field });
+    },
+
+    fetchChildren: function(childTable, refField, parentTable, parentSysId) {
+
+        if (!childTable || !parentSysId) return [];
+        if (!this._cacheFetchChildren) this._cacheFetchChildren = {};
+        var fck = childTable + "::" + refField + "::" + parentTable + "::" + parentSysId;
+        if (this._cacheFetchChildren.hasOwnProperty(fck)) {
+            return this._cacheFetchChildren[fck];
+        }
+
+        var api     = new sn_ws.RESTMessageV2();
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var query   = "";
+
+        if      (childTable === "sys_attachment")     query = "table_sys_id=" + parentSysId + "^table_name=" + parentTable;
+        else if (childTable === "sys_journal_field")  query = "element_id=" + parentSysId + "^name=" + parentTable;
+        else if (childTable === "task_sla")           query = "task=" + parentSysId;
+        else if (childTable === "sys_audit")          query = "documentkey=" + parentSysId + "^tablename=" + parentTable;
+        else if (childTable === "sys_audit_relation") query = "documentkey=" + parentSysId;
+        else if (childTable === "metric_instance")    query = "id=" + parentSysId + "^table=" + parentTable;
+        else if (refField)                            query = refField + "=" + parentSysId;
+        else                                          { this._cacheFetchChildren[fck] = []; return []; }
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/" + childTable +
+            "?sysparm_query=" + encodeURIComponent(query) +
+            "&sysparm_limit=10000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) {
+            if (this.DEBUG) {
+                gs.warn("⚠ fetchChildren " + childTable + " HTTP " +
+                        response.getStatusCode() + " query=" + query);
+            }
+            this._cacheFetchChildren[fck] = [];
+            return [];
+        }
+
+        var rows = JSON.parse(response.getBody()).result || [];
+        this._cacheFetchChildren[fck] = rows;
+        return rows;
+    },
+
+    _preResolveIdentityFields: function(child) {
+
+        for (var field in this.IDENTITY_FIELDS) {
+
+            if (!child.hasOwnProperty(field)) continue;
+
+            var src = this.normalizeRef(child[field]);
+            if (!src) continue;
+            if (src.indexOf(',') !== -1) continue;
+            if (!/^[0-9a-f]{32}$/i.test(src)) continue;
+
+            var refTable = this.IDENTITY_FIELDS[field];
+            var resolved = this._resolveRefForRelated(refTable, src, 1);
+
+            if (resolved) child[field] = resolved;
+        }
+
+        return child;
+    },
+
+    _tableExists: function(tableName) {
+        if (!tableName) return false;
+        if (!this._cacheTableExists) this._cacheTableExists = {};
+        if (this._cacheTableExists.hasOwnProperty(tableName)) {
+            return this._cacheTableExists[tableName];
+        }
+        try {
+            var gr = new GlideRecordSecure(tableName);
+            gr.setLimit(1);
+            gr.query();
+            this._cacheTableExists[tableName] = true;
+            return true;
+        } catch (e) {
+            this._cacheTableExists[tableName] = false;
+            return false;
+        }
+    },
+    _resolveByNameOrCreate: function(refTable, srcSysId) {
+
+        if (!srcSysId || !refTable) return '';
+
+        if (this._sysIdLookup[srcSysId]) {
+            if (this.DEBUG) this.logStep("    " + refTable + " cache hit: " +
+                                          srcSysId + " → " + this._sysIdLookup[srcSysId]);
+            return this._sysIdLookup[srcSysId];
+        }
+
+        var config       = this.M2M_RESOLVER_CONFIG[refTable] || this.M2M_RESOLVER_CONFIG._default;
+        var lookupField  = config.lookupField || "name";
+        var safeFields   = config.safeFields  || [];
+
+        // 1. Same sys_id on target?
+        if (this._tableExists(refTable)) {
+            var grTarget = new GlideRecordSecure(refTable);
+            if (grTarget.get(srcSysId)) {
+                this._setMigrated(refTable, srcSysId, srcSysId);
+                if (this.DEBUG) this.logStep("    " + refTable + " matched by sys_id: " + srcSysId);
+                return srcSysId;
+            }
+        } else {
+            this.logStep("    ⚠ Target table missing: " + refTable);
+            return '';
+        }
+
+        // 2. Fetch source for name lookup
+        var srcRec = this.fetchSourceRecord(refTable, srcSysId);
+        if (!srcRec) {
+            this.logStep("    ⚠ " + refTable + " not fetchable from source: " + srcSysId);
+            return '';
+        }
+
+        var name = this.normalizeRef(srcRec[lookupField]);
+        if (!name) {
+            this.logStep("    ⚠ Source " + refTable + " has no " + lookupField + ": " + srcSysId);
+            return '';
+        }
+
+        // 3. Lookup on target by configured field
+        var grByName = new GlideRecordSecure(refTable);
+        grByName.addQuery(lookupField, name);
+        grByName.setLimit(1);
+        grByName.query();
+
+        if (grByName.next()) {
+            var existingId = grByName.getUniqueValue();
+            this._setMigrated(refTable, srcSysId, existingId);
+            if (this.DEBUG) this.logStep("    " + refTable + " matched by " +
+                                          lookupField + ": '" + name + "' → " + existingId);
+            return existingId;
+        }
+
+        // 4. Create minimal stub. Honour sys_class_name where present.
+        var sysClass   = this.normalizeRef(srcRec.sys_class_name);
+        var classToUse = refTable;
+        if (sysClass && sysClass !== refTable && this._tableExists(sysClass)) {
+            classToUse = sysClass;
+        }
+
+        try {
+            var newRec = new GlideRecordSecure(classToUse);
+            newRec.initialize();
+            newRec.setValue(lookupField, name);
+            if (sysClass && newRec.isValidField("sys_class_name")) {
+                newRec.setValue("sys_class_name", sysClass);
+            }
+
+            for (var i = 0; i < safeFields.length; i++) {
+                var f = safeFields[i];
+                if (!newRec.isValidField(f)) continue;
+                var v = srcRec[f];
+                if (v && typeof v === "object" && v.value !== undefined) v = v.value;
+                if (v === undefined || v === null || v === "") continue;
+                try { newRec.setValue(f, v); } catch (eSet) {}
+            }
+
+            var newId = newRec.insert();
+
+            if (newId) {
+                this._setMigrated(refTable, srcSysId, newId);
+                this.logStep("    ✔ " + classToUse + " created: '" + name + "' → " + newId);
+                return newId;
+            }
+
+            this.logStep("    ⚠ " + classToUse + " insert returned empty for '" + name + "'");
+            return '';
+
+        } catch (eIns) {
+            this.logStep("    ⚠ " + classToUse + " create threw: " + eIns);
+            return '';
+        }
+    },
+    migrateRelatedM2M: function(parentTable, sourceId, targetId) {
+
+        var m2mList = this._discoverM2MTables(parentTable);
+
+        if (m2mList.length === 0) {
+            this.logStep("→ No M2M related lists discovered for " + parentTable);
+            return;
+        }
+
+        for (var idx = 0; idx < m2mList.length; idx++) {
+
+            var cfg = m2mList[idx];
+
+            this.logStep("→ M2M " + cfg.name + " (" + cfg.table + ")");
+
+            // 1. Verify the M2M table exists on the target
+            if (!this._tableExists(cfg.table)) {
+                this.logStep("  ⚠ Table " + cfg.table + " not found on target — skipping");
+                continue;
+            }
+
+            // 2. Validate required fields
+            var grProbe = new GlideRecordSecure(cfg.table);
+            if (!grProbe.isValidField(cfg.taskField)) {
+                this.logStep("  ⚠ Field " + cfg.taskField + " missing on " + cfg.table);
+                continue;
+            }
+            if (!grProbe.isValidField(cfg.refField)) {
+                this.logStep("  ⚠ Field " + cfg.refField + " missing on " + cfg.table);
+                continue;
+            }
+
+            // 3. Fetch source M2M rows
+            var rows = this.fetchChildren(cfg.table, cfg.taskField, parentTable, sourceId);
+            this.logStep("  Source rows fetched: " + rows.length);
+
+            // 4. Fallback to primary form field on parent
+            if (rows.length === 0 && cfg.primaryField) {
+                var record = this.fetchSourceRecord(parentTable, sourceId);
+                if (record) {
+                    var primaryVal = this.normalizeRef(record[cfg.primaryField]);
+                    if (primaryVal) {
+                        var fakeRow = {};
+                        fakeRow[cfg.refField] = primaryVal;
+                        rows = [fakeRow];
+                        this.logStep("  Fallback: using primary " + cfg.primaryField + " = " + primaryVal);
+                    }
+                }
+            }
+
+            if (rows.length === 0) {
+                this.logStep("  No rows to migrate for " + cfg.name);
+                continue;
+            }
+
+            // 5. Process each row through the generic resolver
+            var migrated = 0;
+            var skipped  = 0;
+            var failed   = 0;
+            var existingM2M = {};
+            var grPre = new GlideRecordSecure(cfg.table);
+            grPre.addQuery(cfg.taskField, targetId);
+            grPre.setLimit(5000);
+            grPre.query();
+            while (grPre.next()) {
+                existingM2M[grPre.getValue(cfg.refField)] = true;
+            }
+
+            for (var i = 0; i < rows.length; i++) {
+
+                var row = rows[i];
+
+                try {
+
+                    var srcRefVal = this.normalizeRef(row[cfg.refField]);
+                    if (!srcRefVal) {
+                        this.logStep("  ⚠ Row " + i + " has no " + cfg.refField);
+                        skipped++;
+                        continue;
+                    }
+
+                    /* Single resolver path for every refTable — no special cases */
+                    var targetRefVal = this._resolveByNameOrCreate(cfg.refTable, srcRefVal);
+
+                    if (!targetRefVal) {
+                        this.logStep("  ⚠ Could not resolve " + cfg.refTable + ": " + srcRefVal);
+                        failed++;
+                        continue;
+                    }
+
+                    /* ★ PERF v24: Fast O(1) in-memory dedup instead of GlideRecord query */
+                    if (existingM2M[targetRefVal]) {
+                        if (this.DEBUG) this.logStep("    Already exists: " + cfg.table + " (" + targetId + ", " + targetRefVal + ")");
+                        skipped++;
+                        continue;
+                    }
+
+                    // Insert
+                    var rec = new GlideRecordSecure(cfg.table);
+                    rec.initialize();
+                    rec.setValue(cfg.taskField, targetId);
+                    rec.setValue(cfg.refField,  targetRefVal);
+
+                    for (var k in row) {
+                        if (k === "sys_id" || k === cfg.taskField || k === cfg.refField) continue;
+                        if (!rec.isValidField(k)) continue;
+                        var v = row[k];
+                        if (v && typeof v === "object" && v.value !== undefined) v = v.value;
+                        if (v === undefined || v === null || v === "") continue;
+                        try { rec.setValue(k, v); } catch (eSet) {}
+                    }
+
+                    var newRowId = rec.insert();
+                    if (newRowId) {
+                        existingM2M[targetRefVal] = true;  /* mark for in-batch dedup */
+                        migrated++;
+                        this.currentRecordLog.related_migrated++;
+                        if (this.DEBUG) this.logStep("    ✔ Inserted " + cfg.table + ": " + targetId + " → " + targetRefVal);
+                    } else {
+                        this.logStep("  ⚠ Insert returned empty for " + cfg.table);
+                        failed++;
+                    }
+
+                } catch (e) {
+                    this.logStep("  ⚠ Row " + i + " threw: " + e);
+                    failed++;
+                }
+            }
+
+            this.logStep("  " + cfg.name + " summary — migrated:" + migrated +
+                         " skipped:" + skipped + " failed:" + failed);
+        }
+    },
+    migrateRelatedReferenceFields: function(parentTable, sourceId, targetId) {
+
+        if (!this.RELATED_REFERENCE_FIELDS || this.RELATED_REFERENCE_FIELDS.length === 0)
+            return;
+
+        var srcRecord = this.fetchSourceRecord(parentTable, sourceId);
+
+        for (var i = 0; i < this.RELATED_REFERENCE_FIELDS.length; i++) {
+
+            var cfg = this.RELATED_REFERENCE_FIELDS[i];
+            if (!cfg.enabled || !cfg.field) continue;
+
+            this.logStep("→ Related reference field: " + cfg.name + " (" + cfg.field + ")");
+
+            /* ---------- Direction A — parent → target ---------- */
+            if (srcRecord && srcRecord.hasOwnProperty(cfg.field)) {
+
+                var srcLinkedId = this.normalizeRef(srcRecord[cfg.field]);
+                this.logStep("  [UR-DIAG] Direction A: parent has " + cfg.field +
+                              " = '" + srcLinkedId + "' (source-side)");
+
+                if (srcLinkedId) {
+
+                    var refTable = cfg.refTable || "task";
+                    var srcLinkedRec = this.fetchSourceRecord(refTable, srcLinkedId);
+                    if (!srcLinkedRec) {
+                        srcLinkedRec = this.fetchSourceRecord("universal_request", srcLinkedId);
+                        if (srcLinkedRec) {
+                            this.logStep("  [UR-DIAG] Source record only readable via universal_request table");
+                            refTable = "universal_request";
+                        }
+                    }
+
+                    if (!srcLinkedRec) {
+                        this.logStep("  [UR-DIAG] ⚠ Linked record " + srcLinkedId +
+                                      " NOT FOUND on source — orphan ref or REST access denied. Skipping UR.");
+                        continue;
+                    }
+
+                    this.logStep("  [UR-DIAG] Source record fetched OK. sys_class_name = '" +
+                                  this.normalizeRef(srcLinkedRec.sys_class_name) + "'");
+
+                    try {
+
+                        var newLinkedId = this.migrateWithDependencies(
+                            refTable, srcLinkedId, 1
+                        );
+
+                        this.logStep("  [UR-DIAG] migrateWithDependencies returned: '" +
+                                      newLinkedId + "'");
+
+                        if (newLinkedId) {
+
+                            /* Re-link the parent record */
+                            var grParent = new GlideRecordSecure(parentTable);
+                            if (grParent.get(targetId) &&
+                                grParent.isValidField(cfg.field)) {
+
+                                var current = this.normalizeRef(grParent.getValue(cfg.field));
+                                this.logStep("  [UR-DIAG] Parent " + parentTable + "/" + targetId +
+                                              " currently has " + cfg.field + " = '" + current +
+                                              "', updating to '" + newLinkedId + "'");
+
+                                if (current !== newLinkedId) {
+                                    grParent.setValue(cfg.field, newLinkedId);
+                                    var updRes = grParent.update();
+                                    this.logStep("  [UR-DIAG] Parent re-link update() returned: '" + updRes + "'");
+                                }
+                            } else {
+                                this.logStep("  [UR-DIAG] ⚠ Could not get parent " + parentTable +
+                                              "/" + targetId + " OR field " + cfg.field + " not valid");
+                            }
+
+                            /* Carry the activity stream of the linked record */
+                            this.migrateActivityStreamFor(refTable, srcLinkedId, newLinkedId);
+
+                            this.currentRecordLog.references_migrated++;
+                            this.logStep("  ✔ Direction A: " + cfg.field + " = " + newLinkedId);
+                            var siblingsKey = "siblings_" + refTable + "_" + srcLinkedId;
+                            if (!this._refDeepDone[siblingsKey]) {
+                                this._refDeepDone[siblingsKey] = true;
+                                try {
+                                    this.logStep("  → Pulling UR siblings (other records pointing to this UR)");
+                                    this._migrateReverseRefField(cfg, srcLinkedId, newLinkedId);
+                                } catch (eSib) {
+                                    this.logStep("  ⚠ Sibling pull threw: " + eSib);
+                                }
+                            }
+
+                        } else {
+                            this.logStep("  ⚠ Direction A: could not migrate linked " +
+                                          refTable + " " + srcLinkedId);
+                        }
+
+                    } catch (eA) {
+                        this.logStep("  ⚠ Direction A threw: " + eA);
+                    }
+                } else {
+                    this.logStep("  [UR-DIAG] Parent's " + cfg.field + " field is empty — no UR to migrate");
+                }
+            } else {
+                this.logStep("  [UR-DIAG] Source record does not have field " + cfg.field +
+                              " (parent table " + parentTable + " has no UR field)");
+            }
+            if (cfg.reverseDirection) {
+                this._migrateReverseRefField(cfg, sourceId, targetId);
+            }
+        }
+    },
+    _migrateReverseRefField: function(cfg, sourceId, targetId) {
+
+        this.logStep("  Direction B: searching for incoming " + cfg.field + " refs");
+
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var api     = new sn_ws.RESTMessageV2();
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/sys_dictionary" +
+            "?sysparm_query=" + encodeURIComponent(
+                "element=" + cfg.field + "^internal_type=reference"
+            ) +
+            "&sysparm_fields=name,element,reference" +
+            "&sysparm_limit=10000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var resp = api.execute();
+        if (resp.getStatusCode() != 200) {
+            this.logStep("  [DIR-B] ⚠ sys_dictionary query HTTP " + resp.getStatusCode());
+            return;
+        }
+
+        var rows = JSON.parse(resp.getBody()).result || [];
+        this.logStep("  [DIR-B] dictionary query for element='" + cfg.field +
+                      "' returned " + rows.length + " tables that have this field");
+
+        var tablesFound = {};
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].name) {
+                tablesFound[rows[i].name] = true;
+                if (this.DEBUG) {
+                    var refStr = rows[i].reference;
+                    if (refStr && typeof refStr === "object") refStr = refStr.value;
+                    this.logStep("  [DIR-B]   has field: " + rows[i].name +
+                                  " (references " + refStr + ")");
+                }
+            }
+        }
+
+        var foundCount = 0;
+        for (var fc in tablesFound) if (tablesFound.hasOwnProperty(fc)) foundCount++;
+        this.logStep("  [DIR-B] " + foundCount + " unique tables have a '" +
+                      cfg.field + "' reference field");
+
+        var totalMigrated = 0;
+
+        for (var tableName in tablesFound) {
+
+            if (!tablesFound.hasOwnProperty(tableName))     continue;
+            if (this.SKIP_TABLES[tableName])                { this.logStep("  [DIR-B] skip " + tableName + " (SKIP_TABLES)"); continue; }
+            if (tableName === "sys_dictionary")             continue;
+            if (tableName === "sys_db_object")              continue;
+            if (this._isNoiseTable(tableName))              { this.logStep("  [DIR-B] skip " + tableName + " (noise table)"); continue; }
+
+            /* Query source for rows where cfg.field = sourceId */
+            var matchRows = this.fetchChildren(tableName, cfg.field, "", sourceId);
+            this.logStep("  [DIR-B] " + tableName + " query (" + cfg.field +
+                          "=" + sourceId + ") returned " + matchRows.length + " row(s)");
+            if (matchRows.length === 0) continue;
+
+            this.logStep("    " + tableName + ": " + matchRows.length + " incoming row(s)");
+
+            for (var r = 0; r < matchRows.length; r++) {
+
+                var row    = matchRows[r];
+                var rowSid = this.normalizeRef(row.sys_id);
+                if (!rowSid) continue;
+
+                try {
+
+                    var newRowId = this.migrateWithDependencies(tableName, rowSid, 1);
+
+                    if (newRowId) {
+                        this._setMigrated(tableName, rowSid, newRowId);
+
+                        /* Re-assert the link to point at our new target */
+                        var grChild = new GlideRecordSecure(tableName);
+                        if (grChild.get(newRowId) &&
+                            grChild.isValidField(cfg.field) &&
+                            this.normalizeRef(grChild.getValue(cfg.field)) !== targetId) {
+                            grChild.setValue(cfg.field, targetId);
+                            grChild.update();
+                        }
+
+                        this.migrateActivityStreamFor(tableName, rowSid, newRowId);
+                        totalMigrated++;
+                    }
+
+                } catch (eB) {
+                    this.logStep("    ⚠ " + tableName + " row " + rowSid + " threw: " + eB);
+                }
+            }
+        }
+
+        this.logStep("  Direction B summary — migrated:" + totalMigrated);
+    },
+    migrateDocumentIdRelations: function(parentTable, sourceId, targetId) {
+
+        var relations = this._discoverDocumentIdRelations();
+        if (relations.length === 0) return;
+
+        var parentChain = this._getTableHierarchy(parentTable);
+
+        var totalAttempted = 0;
+        var totalMigrated  = 0;
+
+        for (var i = 0; i < relations.length; i++) {
+
+            var rel = relations[i];
+            var query;
+            if (rel.tableNameField) {
+                var clauses = [];
+                for (var c = 0; c < parentChain.length; c++) {
+                    clauses.push(rel.tableNameField + "=" + parentChain[c]);
+                }
+                query = rel.refField + "=" + sourceId + "^(" + clauses.join("^OR") + ")";
+            } else {
+                query = rel.refField + "=" + sourceId;
+            }
+
+            var rows = this._restQuery(rel.childTable, query);
+            if (rows.length === 0) continue;
+
+            this.logStep("→ Document_id relation: " + rel.childTable +
+                         " (" + rel.refField +
+                         (rel.tableNameField ? " + " + rel.tableNameField : "") +
+                         ") — " + rows.length + " row(s)");
+
+            for (var r = 0; r < rows.length; r++) {
+
+                var row = rows[r];
+                var rowSid = this.normalizeRef(row.sys_id);
+                if (!rowSid) continue;
+
+                totalAttempted++;
+
+                try {
+                    var newRowId = this.migrateWithDependencies(rel.childTable, rowSid, 1);
+
+                    if (!newRowId) {
+                        this.logStep("  ⚠ Could not migrate " + rel.childTable + " row " + rowSid);
+                        continue;
+                    }
+                    var fix = new GlideRecordSecure(rel.childTable);
+                    if (fix.get(newRowId)) {
+
+                        var needUpdate = false;
+
+                        if (fix.isValidField(rel.refField) &&
+                            this.normalizeRef(fix.getValue(rel.refField)) !== targetId) {
+                            fix.setValue(rel.refField, targetId);
+                            needUpdate = true;
+                        }
+
+                        if (rel.tableNameField &&
+                            fix.isValidField(rel.tableNameField) &&
+                            this.normalizeRef(fix.getValue(rel.tableNameField)) !== parentTable) {
+                            fix.setValue(rel.tableNameField, parentTable);
+                            needUpdate = true;
+                        }
+
+                        if (needUpdate) {
+                            fix.update();
+                        }
+                    }
+
+                    this.migrateActivityStreamFor(rel.childTable, rowSid, newRowId);
+                    totalMigrated++;
+                    this.currentRecordLog.related_migrated++;
+
+                    if (this.DEBUG) {
+                        this.logStep("    ✔ " + rel.childTable + " " + rowSid + " → " + newRowId);
+                    }
+
+                } catch (e) {
+                    this.logStep("  ⚠ " + rel.childTable + " row " + rowSid + " threw: " + e);
+                }
+            }
+        }
+
+        if (totalAttempted > 0) {
+            this.logStep("Document_id relations summary — attempted:" + totalAttempted +
+                         " migrated:" + totalMigrated);
+        }
+    },
+    _restQuery: function(table, query) {
+
+        if (!table || !query) return [];
+
+        if (!this._cacheRestQuery) this._cacheRestQuery = {};
+        var rk = table + "::" + query;
+        if (this._cacheRestQuery.hasOwnProperty(rk)) {
+            return this._cacheRestQuery[rk];
+        }
+
+        var api     = new sn_ws.RESTMessageV2();
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/" + table +
+            "?sysparm_query=" + encodeURIComponent(query) +
+            "&sysparm_limit=10000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) {
+            if (this.DEBUG) {
+                gs.warn("⚠ _restQuery " + table + " HTTP " +
+                        response.getStatusCode() + " query=" + query);
+            }
+            this._cacheRestQuery[rk] = [];
+            return [];
+        }
+
+        var rows = JSON.parse(response.getBody()).result || [];
+        this._cacheRestQuery[rk] = rows;
+        return rows;
+    },
+
+    migrateRelatedLists: function(parentTable, sourceId, targetId, depth) {
+
+        depth = depth || 1;
+
+        /* Hard caps */
+        if (depth > this.MAX_RELATED_DEPTH) {
+            if (this.DEBUG) this.logStep("  ⊘ MAX_RELATED_DEPTH (" + this.MAX_RELATED_DEPTH +
+                                          ") reached for " + parentTable + "/" + sourceId);
+            return;
+        }
+        if (this._deepStats.migrated >= this.MAX_DEEP_RECORDS) {
+            if (!this._deepStats.capped) {
+                this.logStep("  ⊘ MAX_DEEP_RECORDS cap (" + this.MAX_DEEP_RECORDS +
+                             ") reached — further deep recursion suppressed");
+                this._deepStats.capped = true;
+            }
+            return;
+        }
+
+        /* Cycle guard: don't process the same (table, sys_id) twice in deep mode */
+        var deepKey = "deep_" + parentTable + "_" + sourceId;
+        if (depth > 1 && this._visited[deepKey]) {
+            if (this.DEBUG) this.logStep("  ⊘ Already deep-processed " + parentTable + "/" + sourceId);
+            return;
+        }
+        this._visited[deepKey] = true;
+
+        var lists = this.discoverRelatedLists(parentTable);
+        if (lists.length > 0 && depth === 1) this.logStep("Processing related lists");
+        if (lists.length > 0 && depth > 1) {
+            this.logStep("  [depth " + depth + "] Processing related lists for " +
+                          parentTable + "/" + sourceId);
+        }
+
+        for (var i = 0; i < lists.length; i++) {
+
+            var rl       = lists[i];
+            var children = this.fetchChildren(rl.childTable, rl.refField, parentTable, sourceId);
+
+            for (var j = 0; j < children.length; j++) {
+
+                var child = children[j];
+
+                try {
+
+                    if (rl.childTable === "sys_journal_field"  ||
+                        rl.childTable === "sys_audit"          ||
+                        rl.childTable === "sys_audit_relation" ||
+                        rl.childTable === "sys_history_set"    ||
+                        rl.childTable === "sys_history_line"   ||
+                        rl.childTable === "sys_email") continue;
+
+                    if (this.SKIP_TABLES[rl.childTable]) continue;
+
+                    if (rl.childTable === "metric_instance") {
+
+                        var mExists = new GlideRecordSecure("metric_instance");
+                        mExists.addQuery("id",         targetId);
+                        mExists.addQuery("definition", child.definition);
+                        mExists.addQuery("start",      child.start);
+                        mExists.setLimit(1);
+                        mExists.query();
+                        if (mExists.next()) continue;
+
+                        child.id    = targetId;
+                        child.table = parentTable;
+
+                        child = this._preResolveIdentityFields(child);
+                        child = this._remapChildRefs(child, "metric_instance");
+
+                        this.safeUpsert(child, "metric_instance", child.sys_id);
+                        this.currentRecordLog.related_migrated++;
+                        this._incrementProgress();
+                        continue;
+                    }
+
+                    if (this._isTaskDerived(rl.childTable)) {
+
+                        var fullId = this.migrateWithDependencies(rl.childTable, child.sys_id, 1);
+
+                        if (fullId) {
+                            this._setMigrated(rl.childTable, child.sys_id, fullId);
+
+                            if (rl.refField) {
+                                var grLink = new GlideRecordSecure(rl.childTable);
+                                if (grLink.get(fullId) &&
+                                    this.normalizeRef(grLink.getValue(rl.refField)) !== targetId) {
+                                    grLink.setValue(rl.refField, targetId);
+                                    grLink.update();
+                                }
+                            }
+
+                            this.migrateActivityStreamFor(rl.childTable, child.sys_id, fullId);
+
+                            this.currentRecordLog.related_migrated++;
+                            this._deepStats.migrated++;
+                            this._incrementProgress();
+                            if (this.DEEP_RECURSION_ENABLED &&
+                                this.DEEP_RECURSE_TABLES[rl.childTable] &&
+                                depth < this.MAX_RELATED_DEPTH) {
+
+                                this._deepRecurseRelated(rl.childTable, child.sys_id, fullId, depth + 1);
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (rl.refField) child[rl.refField] = targetId;
+
+                    child = this._preResolveIdentityFields(child);
+
+                    var skip = {};
+                    if (rl.refField) skip[rl.refField] = true;
+                    child = this._remapChildRefs(child, rl.childTable, 1, skip);
+
+                    if (rl.refField) child[rl.refField] = targetId;
+
+                    var childTargetId = this.safeUpsert(child, rl.childTable, child.sys_id);
+                    if (childTargetId) this._setMigrated(rl.childTable, child.sys_id, childTargetId);
+
+                    this.currentRecordLog.related_migrated++;
+                    this._incrementProgress();
+
+                } catch (e) {
+                    this.currentRecordLog.related_failed++;
+                    this.currentRecordLog.errors.push("Related failed: " + rl.childTable);
+                    gs.warn("Related record failed: " + rl.childTable + " — " + e);
+                }
+            }
+        }
+
+        if (depth === 1) {
+            this._migrateApprovalsRecursive(parentTable, sourceId, targetId);
+        }
+    },
+    _deepRecurseRelated: function(childTable, srcSysId, targetSysId, depth) {
+
+        if (!this.DEEP_RECURSION_ENABLED) return;
+        if (depth > this.MAX_RELATED_DEPTH) return;
+        if (this._deepStats.migrated >= this.MAX_DEEP_RECORDS) return;
+
+        if (this.DEBUG) {
+            this.logStep("  ↳ [depth " + depth + "] deep-recursing " + childTable + "/" + srcSysId);
+        }
+
+        try {
+            /* Lateral task-task relationships (problem_id, change_request, etc.) */
+            this.migrateTaskRelationships(childTable, srcSysId, targetSysId);
+
+            /* M2M related lists (Affected CIs, Service Offerings, Groups, Locations…) */
+            this.migrateRelatedM2M(childTable, srcSysId, targetSysId);
+
+            /* Recurse into THIS child's related lists */
+            this.migrateRelatedLists(childTable, srcSysId, targetSysId, depth);
+
+            /* SLAs, attachments — each child task gets its own */
+            this.copyAttachments(childTable, srcSysId, targetSysId);
+            this.insertSLAs(srcSysId, targetSysId);
+            this.migrateActivityStreamFor(childTable, srcSysId, targetSysId);
+
+        } catch (e) {
+            gs.warn("Deep recurse failed: " + childTable + "/" + srcSysId + " — " + e);
+        }
+    },
+
+    _isTaskDerived: function(table) {
+        if (!table) return false;
+        if (table === "task") return true;
+        var chain = this._getTableHierarchy(table);
+        return chain.indexOf("task") !== -1;
+    },
+
+    _migrateApprovalsRecursive: function(parentTable, sourceId, targetId) {
+
+        try {
+
+            var approvalTargets = [{ source: sourceId, target: targetId, table: parentTable }];
+
+            if (parentTable === "sc_request") {
+
+                var ritms = this.fetchChildren("sc_req_item", "request", parentTable, sourceId);
+
+                for (var r = 0; r < ritms.length; r++) {
+                    var ritm         = ritms[r];
+                    var targetRitmId = this.migrateWithDependencies("sc_req_item", ritm.sys_id, 1);
+                    if (targetRitmId) this._setMigrated("sc_req_item", ritm.sys_id, targetRitmId);
+
+                    approvalTargets.push({ source: ritm.sys_id, target: targetRitmId, table: "sc_req_item" });
+
+                    if (targetRitmId)
+                        this.migrateActivityStreamFor("sc_req_item", ritm.sys_id, targetRitmId);
+
+                    var tasks = this.fetchChildren("sc_task", "request_item", "sc_req_item", ritm.sys_id);
+
+                    for (var tk = 0; tk < tasks.length; tk++) {
+                        var task         = tasks[tk];
+                        var targetTaskId = this.migrateWithDependencies("sc_task", task.sys_id, 1);
+                        if (targetTaskId) this._setMigrated("sc_task", task.sys_id, targetTaskId);
+
+                        approvalTargets.push({ source: task.sys_id, target: targetTaskId, table: "sc_task" });
+
+                        if (targetTaskId)
+                            this.migrateActivityStreamFor("sc_task", task.sys_id, targetTaskId);
+                    }
+                }
+            }
+
+            for (var a = 0; a < approvalTargets.length; a++) {
+
+                var pair      = approvalTargets[a];
+                var approvals = this.fetchChildren("sysapproval_approver", "sysapproval", "", pair.source);
+
+                for (var x = 0; x < approvals.length; x++) {
+
+                    var appr = approvals[x];
+
+                    try {
+                        appr.sysapproval = pair.target;
+                        appr = this._preResolveIdentityFields(appr);
+
+                        var skipAppr = { sysapproval: true };
+                        appr = this._remapChildRefs(appr, "sysapproval_approver", 1, skipAppr);
+                        appr.sysapproval = pair.target;
+                        this.safeUpsert(appr, "sysapproval_approver", appr.sys_id);
+                    } catch (eAppr) { gs.warn("Approval migration failed"); }
+                }
+            }
+
+        } catch (e) {
+            gs.error("Approval recursion failed: " + e);
+        }
+    },
+
+    migrateActivityStreamFor: function(table, sourceId, targetId) {
+
+        if (!sourceId || !targetId) return;
+        if (this.FAST_MODE) {
+            if (this.DEBUG) this.logStep("  ⏩ FAST_MODE: skipping activity stream for " + table + "/" + sourceId);
+            return;
+        }
+
+        if (!this._activityStreamDone) this._activityStreamDone = {};
+
+        var guardKey = table + "_" + sourceId;
+        if (this._activityStreamDone[guardKey]) return;
+        this._activityStreamDone[guardKey] = true;
+
+        try {
+            this.migrateAuditFor(table, sourceId, targetId);
+            this.migrateJournalFor(table, sourceId, targetId);
+            this.migrateHistorySetsFor(table, sourceId, targetId);
+            this.migrateEmailFor(table, sourceId, targetId);
+        } catch (e) {
+            gs.warn("⚠ migrateActivityStreamFor failed: " + table + "/" + sourceId + " — " + e);
+        }
+    },
+
+    _fetchAuditRows: function(auditTable, parentTable, sourceId) {
+
+        var api     = new sn_ws.RESTMessageV2();
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+
+        var query = (auditTable === "sys_audit_relation")
+            ? "documentkey=" + sourceId
+            : "documentkey=" + sourceId + "^tablename=" + parentTable;
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/" + auditTable +
+            "?sysparm_query=" + encodeURIComponent(query) +
+            "&sysparm_limit=5000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var response = api.execute();
+        if (response.getStatusCode() != 200) return [];
+
+        return JSON.parse(response.getBody()).result || [];
+    },
+
+    migrateAuditFor: function(table, sourceId, targetId) {
+
+        var auditTables   = ["sys_audit", "sys_audit_relation"];
+        var totalMigrated = 0;
+        var totalSkipped  = 0;
+
+        for (var t = 0; t < auditTables.length; t++) {
+
+            var auditTable = auditTables[t];
+            var audits     = this._fetchAuditRows(auditTable, table, sourceId);
+            if (audits.length === 0) continue;
+            this._batchPrefetchUsers(audits);
+            var existingSignatures = this._loadExistingAuditSignatures(auditTable, targetId, table);
+
+            for (var i = 0; i < audits.length; i++) {
+
+                var aud = audits[i];
+
+                try {
+
+                    var auditCopy = {};
+                    for (var k in aud) auditCopy[k] = aud[k];
+
+                    auditCopy.documentkey = targetId;
+
+                    if (auditTable === "sys_audit") {
+                        auditCopy.tablename      = table;
+                        auditCopy.sys_class_name = table;
+                    }
+
+                    if (auditCopy.user) {
+                        var srcUser = this.normalizeRef(auditCopy.user);
+                        /* Cache hit — set in _batchPrefetchUsers above */
+                        if (srcUser) {
+                            auditCopy.user = this._sysIdLookup[srcUser] ||
+                                              this._resolveByNaturalKey("sys_user", srcUser) || "";
+                        }
+                    }
+                    var createdBy = this.normalizeRef(auditCopy.sys_created_by);
+                    if (createdBy) this._ensureUserExists(createdBy);
+
+                    /* ★ PERF v24: Skip the full-row remap when the lookup
+                       table is empty — there's nothing to remap. This
+                       function regex-scans every field of every audit row;
+                       skipping when not needed saves significant time. */
+                    if (this._sysIdLookup && Object.keys(this._sysIdLookup).length > 0) {
+                        this._remapAllSysIdFieldsInRow(auditCopy, { documentkey: true });
+                    }
+
+                    /* Fast dedup using preloaded set */
+                    var sig = (aud.fieldname || "") + "::" + (aud.sys_created_on || "");
+                    if (existingSignatures[sig]) {
+                        totalSkipped++;
+                        continue;
+                    }
+
+                    var result = this.safeUpsert(auditCopy, auditTable, "");
+
+                    if (result) {
+                        totalMigrated++;
+                        this.currentRecordLog.audit_migrated++;
+                        existingSignatures[sig] = true;  // mark migrated to dedup within batch
+                        this._auditRowsToFix.push({
+                            table:        auditTable,
+                            targetId:     result,
+                            sysCreatedBy: createdBy
+                        });
+                    }
+
+                } catch (e) {
+                    this.currentRecordLog.audit_failed++;
+                }
+            }
+        }
+
+        this.logStep("Audit migrated: " + totalMigrated + ", skipped: " + totalSkipped);
+    },
+
+    /* ★ PERF v21 — pre-fetch all unique users referenced by a batch of rows
+       in ONE source REST call, populating _sysIdLookup so per-row resolution
+       hits the cache. Was the #1 bottleneck on records with rich audit. */
+    _batchPrefetchUsers: function(rows) {
+
+        if (!rows || rows.length === 0) return;
+
+        /* Collect unique source user sys_ids that aren't already cached */
+        var needFetch = {};
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var u = r && r.user;
+            if (u && typeof u === "object" && u.value !== undefined) u = u.value;
+            if (!u) continue;
+            u = String(u).trim();
+            if (!/^[0-9a-f]{32}$/i.test(u)) continue;
+            if (this._sysIdLookup[u]) continue;            // already resolved
+            if (this._cacheNaturalKey["sys_user_" + u]) continue;
+            needFetch[u] = true;
+        }
+
+        var uniqueIds = [];
+        for (var sid in needFetch) {
+            if (needFetch.hasOwnProperty(sid)) uniqueIds.push(sid);
+        }
+        if (uniqueIds.length === 0) return;
+
+        if (this.DEBUG) {
+            this.logStep("  Batch pre-fetch " + uniqueIds.length + " users from source");
+        }
+
+        /* Single REST: get all these users with user_name field */
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        /* Source URLs have a length limit; chunk to 50 at a time */
+        var chunkSize = 50;
+        for (var c = 0; c < uniqueIds.length; c += chunkSize) {
+
+            var chunk = uniqueIds.slice(c, c + chunkSize);
+            var query = "sys_idIN" + chunk.join(",");
+
+            var api = new sn_ws.RESTMessageV2();
+            api.setEndpoint(
+                baseUrl +
+                "/api/now/table/sys_user" +
+                "?sysparm_query=" + encodeURIComponent(query) +
+                "&sysparm_fields=sys_id,user_name,first_name,last_name,name,email,active" +
+                "&sysparm_limit=" + chunkSize +
+                "&sysparm_display_value=false"
+            );
+            api.setHttpMethod("GET");
+            api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+            var resp = api.execute();
+            if (resp.getStatusCode() != 200) continue;
+
+            var users = JSON.parse(resp.getBody()).result || [];
+
+            /* Populate source-record cache to short-circuit later
+               fetchSourceRecord calls in _resolveByNaturalKey */
+            if (!this._cacheSourceRecord) this._cacheSourceRecord = {};
+            for (var u = 0; u < users.length; u++) {
+                var rec = users[u];
+                var rid = this.normalizeRef(rec.sys_id);
+                if (rid) {
+                    this._cacheSourceRecord["sys_user::" + rid] = rec;
+                }
+            }
+        }
+
+        /* Now batch-resolve each on TARGET in one query per chunk by user_name */
+        for (var c2 = 0; c2 < uniqueIds.length; c2 += chunkSize) {
+
+            var chunk2 = uniqueIds.slice(c2, c2 + chunkSize);
+            var unames = [];
+            var srcBySid = {};
+
+            for (var k = 0; k < chunk2.length; k++) {
+                var srcRec = this._cacheSourceRecord["sys_user::" + chunk2[k]];
+                if (!srcRec) continue;
+                var un = this.normalizeRef(srcRec.user_name);
+                if (!un) continue;
+                unames.push(un);
+                srcBySid[chunk2[k]] = srcRec;
+            }
+
+            if (unames.length === 0) continue;
+
+            /* Single GlideRecord query for all matching user_names on target */
+            var grBatch = new GlideRecordSecure("sys_user");
+            grBatch.addQuery("user_name", "IN", unames.join(","));
+            grBatch.setLimit(unames.length);
+            grBatch.query();
+
+            var foundByName = {};
+            while (grBatch.next()) {
+                foundByName[grBatch.getValue("user_name")] = grBatch.getUniqueValue();
+            }
+
+            /* Populate _sysIdLookup and _migratedRecords for cache hits */
+            for (var sid2 in srcBySid) {
+                var rec2 = srcBySid[sid2];
+                var un2 = this.normalizeRef(rec2.user_name);
+                if (foundByName[un2]) {
+                    this._setMigrated("sys_user", sid2, foundByName[un2]);
+                    this._cacheNaturalKey["sys_user_" + sid2] = foundByName[un2];
+                }
+            }
+        }
+    },
+
+    /* ★ PERF v21 — load all existing audit signatures (fieldname + created_on)
+       for this target document in ONE query, instead of querying per row. */
+    _loadExistingAuditSignatures: function(auditTable, targetId, table) {
+
+        var sigs = {};
+        var gr = new GlideRecordSecure(auditTable);
+        gr.addQuery("documentkey", targetId);
+        if (auditTable === "sys_audit") gr.addQuery("tablename", table);
+        gr.setLimit(50000);
+        gr.query();
+        while (gr.next()) {
+            var fn = gr.getValue("fieldname") || "";
+            var co = gr.getValue("sys_created_on") || "";
+            sigs[fn + "::" + co] = true;
+        }
+        return sigs;
+    },
+
+    _auditExists: function(auditTable, targetId, table, aud) {
+
+        var gr = new GlideRecordSecure(auditTable);
+        gr.addQuery("documentkey", targetId);
+        gr.addQuery("tablename",   table);
+
+        var fieldname = String(aud.fieldname || "").trim();
+        if (fieldname) gr.addQuery("fieldname", fieldname);
+
+        gr.setLimit(1);
+        gr.query();
+
+        return gr.next();
+    },
+
+    migrateJournalFor: function(table, sourceId, targetId) {
+
+        var journals = this.fetchChildren("sys_journal_field", "element_id", table, sourceId);
+        var migrated = 0;
+        if (journals.length === 0) return;
+
+        /* ★ PERF v21: Pre-load all existing journal signatures in ONE query.
+           Pre-resolve created_by usernames in batch via _ensureUserExistsBatch. */
+        var existingSigs = {};
+        var grEx = new GlideRecordSecure("sys_journal_field");
+        grEx.addQuery("element_id", targetId);
+        grEx.addQuery("name",       table);
+        grEx.setLimit(50000);
+        grEx.query();
+        while (grEx.next()) {
+            /* Use value hash + sys_created_on as unique signature */
+            var v = grEx.getValue("value") || "";
+            var c = grEx.getValue("sys_created_on") || "";
+            existingSigs[v.substring(0, 200) + "::" + c] = true;
+        }
+
+        /* Pre-resolve all sys_created_by usernames in batch */
+        var unameSet = {};
+        for (var j2 = 0; j2 < journals.length; j2++) {
+            var cb = journals[j2] && journals[j2].sys_created_by;
+            if (cb && typeof cb === "object" && cb.value !== undefined) cb = cb.value;
+            if (cb) unameSet[String(cb).trim()] = true;
+        }
+        this._ensureUserExistsBatch(unameSet);
+
+        for (var i = 0; i < journals.length; i++) {
+
+            var jrn = journals[i];
+
+            try {
+                var jrnCopy = {};
+                for (var k in jrn) jrnCopy[k] = jrn[k];
+
+                jrnCopy.element_id = targetId;
+                jrnCopy.name       = table;
+
+                /* Cache hit — _ensureUserExistsBatch populated _cacheUserNameExists */
+                var createdBy = this.normalizeRef(jrnCopy.sys_created_by);
+                if (createdBy && !this._cacheUserNameExists[createdBy]) {
+                    this._ensureUserExists(createdBy);
+                }
+
+                var v2  = String(jrn.value || "");
+                var c2  = String(jrn.sys_created_on || "");
+                var sig = v2.substring(0, 200) + "::" + c2;
+                if (existingSigs[sig]) continue;
+
+                var result = this.safeUpsert(jrnCopy, "sys_journal_field", "");
+                if (result) {
+                    migrated++;
+                    this.currentRecordLog.journal_migrated++;
+                    existingSigs[sig] = true;
+                }
+
+            } catch (e) {
+                this.currentRecordLog.journal_failed++;
+            }
+        }
+
+        this.logStep("Journal migrated: " + migrated);
+    },
+
+    /* ★ PERF v21 — bulk version of _ensureUserExists. Single query to check
+       which usernames exist on target, single insert pass for missing ones. */
+    _ensureUserExistsBatch: function(usernameSet) {
+
+        if (!this._cacheUserNameExists) this._cacheUserNameExists = {};
+
+        var toCheck = [];
+        for (var un in usernameSet) {
+            if (!usernameSet.hasOwnProperty(un)) continue;
+            if (this._cacheUserNameExists[un]) continue;
+            toCheck.push(un);
+        }
+        if (toCheck.length === 0) return;
+
+        var gr = new GlideRecordSecure("sys_user");
+        gr.addQuery("user_name", "IN", toCheck.join(","));
+        gr.setLimit(toCheck.length);
+        gr.query();
+
+        var found = {};
+        while (gr.next()) {
+            var un2 = gr.getValue("user_name");
+            this._cacheUserNameExists[un2] = gr.getUniqueValue();
+            found[un2] = true;
+        }
+
+        /* Create missing users with minimal fields */
+        for (var i = 0; i < toCheck.length; i++) {
+            var name = toCheck[i];
+            if (found[name]) continue;
+            var user = new GlideRecordSecure("sys_user");
+            user.initialize();
+            user.setValue("user_name", name);
+            user.setValue("name",      name);
+            user.setValue("active",    true);
+            var newId = user.insert();
+            if (newId) this._cacheUserNameExists[name] = newId;
+        }
+    },
+
+    _journalExists: function(targetId, table, jrn) {
+
+        var gr = new GlideRecordSecure("sys_journal_field");
+        gr.addQuery("element_id", targetId);
+        gr.addQuery("name",       table);
+
+        var value = String(jrn.value || "");
+        if (value) gr.addQuery("value", value);
+
+        gr.setLimit(1);
+        gr.query();
+
+        return gr.next();
+    },
+
+    migrateEmailFor: function(table, sourceId, targetId) {
+
+        var baseUrl = this.SOURCE_URL.replace(/\/+$/, '');
+        var api     = new sn_ws.RESTMessageV2();
+
+        api.setEndpoint(
+            baseUrl +
+            "/api/now/table/sys_email" +
+            "?sysparm_query=" + encodeURIComponent(
+                "instance=" + sourceId +
+                "^ORtarget=" + sourceId +
+                "^ORtarget_sys_id=" + sourceId
+            ) +
+            "&sysparm_limit=10000" +
+            "&sysparm_display_value=false"
+        );
+        api.setHttpMethod("GET");
+        api.setBasicAuth(this.SOURCE_USER, this.SOURCE_PSWD);
+
+        var resp = api.execute();
+        if (resp.getStatusCode() != 200) return;
+
+        var emails = JSON.parse(resp.getBody()).result || [];
+        if (emails.length === 0) return;
+
+        /* ★ PERF v21: Batch resolve created_by usernames in one query */
+        var unameSet = {};
+        for (var u = 0; u < emails.length; u++) {
+            var cb = emails[u] && emails[u].sys_created_by;
+            if (cb && typeof cb === "object" && cb.value !== undefined) cb = cb.value;
+            if (cb) unameSet[String(cb).trim()] = true;
+        }
+        this._ensureUserExistsBatch(unameSet);
+
+        for (var i = 0; i < emails.length; i++) {
+
+            var email = emails[i];
+
+            try {
+                var copy = {};
+                for (var k in email) copy[k] = email[k];
+
+                copy.instance      = targetId;
+                copy.target        = targetId;
+                copy.target_sys_id = targetId;
+
+                /* createdBy cached by _ensureUserExistsBatch */
+                var createdBy = this.normalizeRef(copy.sys_created_by);
+                if (createdBy && !this._cacheUserNameExists[createdBy]) {
+                    this._ensureUserExists(createdBy);
+                }
+
+                this.safeUpsert(copy, "sys_email", "");
+                this.currentRecordLog.email_migrated++;
+
+            } catch (e) {
+                this.currentRecordLog.email_failed++;
+            }
+        }
+    },
+
+    copyAttachments: function(table, sourceId, targetId) {
+
+        var attachments = this.fetchChildren("sys_attachment", "table_sys_id", table, sourceId);
+
+        for (var i = 0; i < attachments.length; i++) {
+
+            var att = attachments[i];
+
+            try {
+                var copy = {};
+                for (var k in att) copy[k] = att[k];
+
+                copy.table_sys_id = targetId;
+                copy.table_name   = table;
+
+                this.safeUpsert(copy, "sys_attachment", att.sys_id);
+                this.currentRecordLog.attachments_copied++;
+
+            } catch (e) {
+                gs.warn("Attachment copy failed: " + att.sys_id);
+            }
+        }
+    },
+
+    insertSLAs: function(sourceId, targetId) {
+
+        var slas = this.fetchChildren("task_sla", "task", "", sourceId);
+
+        for (var i = 0; i < slas.length; i++) {
+
+            var sla = slas[i];
+
+            try {
+                var copy = {};
+                for (var k in sla) copy[k] = sla[k];
+
+                var slaDefSrc      = this.normalizeRef(copy.sla);
+                var resolvedSlaDef = '';
+
+                if (slaDefSrc) {
+                    resolvedSlaDef = this._resolveByNaturalKey("contract_sla", slaDefSrc);
+
+                    if (!resolvedSlaDef) {
+                        var grSlaCheck = new GlideRecordSecure("contract_sla");
+                        if (grSlaCheck.get(slaDefSrc)) resolvedSlaDef = slaDefSrc;
+                    }
+
+                    if (resolvedSlaDef) {
+                        copy.sla = resolvedSlaDef;
+                        this._setMigrated("contract_sla", slaDefSrc, resolvedSlaDef);
+                    } else {
+                        gs.warn("⚠ SLA definition not found on target: " + slaDefSrc);
+                    }
+                }
+
+                copy.task = targetId;
+                copy = this._preResolveIdentityFields(copy);
+                copy = this._remapChildRefs(copy, "task_sla", 1, { sla: true, task: true });
+
+                copy.task = targetId;
+                if (resolvedSlaDef) copy.sla = resolvedSlaDef;
+
+                var dupCheck = new GlideRecordSecure("task_sla");
+                dupCheck.addQuery("task", targetId);
+                if (copy.sla) dupCheck.addQuery("sla", copy.sla);
+                dupCheck.setLimit(1);
+                dupCheck.query();
+
+                if (dupCheck.next()) {
+                    this.safeUpsert(copy, "task_sla", dupCheck.getUniqueValue());
+                } else {
+                    this.safeUpsert(copy, "task_sla", sla.sys_id);
+                }
+
+            } catch (e) {
+                gs.warn("SLA migration failed: " + sla.sys_id + " — " + e);
+            }
+        }
+    },
+
+    migrateChildTasks: function(parentTable, sourceId, targetId) {
+
+        var children = this.fetchChildren("task", "parent", parentTable, sourceId);
+
+        for (var i = 0; i < children.length; i++) {
+
+            var child = children[i];
+
+            try {
+                var newId = this.migrateWithDependencies("task", child.sys_id, 1);
+
+                if (newId) {
+                    this._setMigrated("task", child.sys_id, newId);
+
+                    var grLink = new GlideRecordSecure("task");
+                    if (grLink.get(newId) &&
+                        this.normalizeRef(grLink.getValue("parent")) !== targetId) {
+                        grLink.setValue("parent", targetId);
+                        grLink.update();
+                    }
+
+                    this.migrateActivityStreamFor("task", child.sys_id, newId);
+                }
+
+            } catch (e) {
+                gs.warn("Child task migration failed: " + e);
+            }
+        }
+    },
+
+    migrateChildIncidents: function(sourceId, targetId) {
+
+        var children = this.fetchChildren("incident", "parent_incident", "", sourceId);
+
+        for (var i = 0; i < children.length; i++) {
+
+            var child = children[i];
+
+            try {
+                var migratedChildId = this.migrateWithDependencies("incident", child.sys_id, 1);
+
+                if (migratedChildId) {
+                    this._setMigrated("incident", child.sys_id, migratedChildId);
+
+                    var grLink = new GlideRecordSecure("incident");
+                    if (grLink.get(migratedChildId) &&
+                        this.normalizeRef(grLink.getValue("parent_incident")) !== targetId) {
+                        grLink.setValue("parent_incident", targetId);
+                        grLink.update();
+                    }
+
+                    this.migrateActivityStreamFor("incident", child.sys_id, migratedChildId);
+                }
+
+            } catch (e) {
+                gs.warn("Child incident migration failed: " + e);
+            }
+        }
+    },
+
+    /* =====================================================
+       Cross-task lateral relationships, now driven by
+       _discoverTaskRelationships() instead of a hardcoded array.
+    ===================================================== */
+    migrateTaskRelationships: function(table, sourceId, targetId) {
+
+        try {
+
+            var record = this.fetchSourceRecord(table, sourceId);
+            if (!record) return;
+
+            var taskRels = this._discoverTaskRelationships(table);
+
+            if (this.DEBUG) {
+                this.logStep("Task relationships discovered for " + table + ": " + taskRels.length);
+            }
+
+            for (var i = 0; i < taskRels.length; i++) {
+
+                var rel    = taskRels[i];
+                var srcRef = this.normalizeRef(record[rel.field]);
+
+                if (!srcRef) continue;
+
+                var targetRef = this.migrateWithDependencies(rel.table, srcRef, 1);
+
+                if (targetRef) {
+                    var gr = new GlideRecordSecure(table);
+                    if (gr.get(targetId) && gr.isValidField(rel.field)) {
+                        var current = this.normalizeRef(gr.getValue(rel.field));
+                        if (current !== targetRef) {
+                            gr.setValue(rel.field, targetRef);
+                            gr.update();
+                        }
+                    }
+                    this.logStep("✔ Lateral " + rel.table + " resolved via " + rel.field);
+                }
+            }
+
+        } catch (e) {
+            gs.warn("Task relationship migration failed: " + e);
+        }
+    },
+
+    migrateM2MRelations: function(table, sourceId, targetId) {
+
+        for (var m = 0; m < this.M2M_DEFINITIONS.length; m++) {
+
+            var def     = this.M2M_DEFINITIONS[m];
+            var allRels = [];
+            var seen    = {};
+
+            for (var fi = 0; fi < def.fields.length; fi++) {
+
+                var fieldDef = def.fields[fi];
+                var rels     = this.fetchChildren(def.table, fieldDef.field, table, sourceId);
+
+                for (var ri = 0; ri < rels.length; ri++) {
+                    var r    = rels[ri];
+                    var rsid = this.normalizeRef(r.sys_id);
+                    if (rsid && !seen[rsid]) {
+                        seen[rsid] = true;
+                        allRels.push(r);
+                    }
+                }
+            }
+
+            for (var idx = 0; idx < allRels.length; idx++) {
+
+                var rel = allRels[idx];
+
+                try {
+                    for (var fi2 = 0; fi2 < def.fields.length; fi2++) {
+                        var fd = def.fields[fi2];
+                        var src = this.normalizeRef(rel[fd.field]);
+                        if (!src) continue;
+
+                        if (src === sourceId) {
+                            rel[fd.field] = targetId;
+                        } else {
+                            var resolved = this._resolveRefForRelated(fd.refTable, src, 1);
+                            if (resolved) rel[fd.field] = resolved;
+                        }
+                    }
+
+                    var dup = new GlideRecordSecure(def.table);
+                    for (var fi3 = 0; fi3 < def.fields.length; fi3++) {
+                        var fd2 = def.fields[fi3];
+                        if (rel[fd2.field]) dup.addQuery(fd2.field, rel[fd2.field]);
+                    }
+                    dup.setLimit(1);
+                    dup.query();
+
+                    if (dup.next()) continue;
+
+                    this.safeUpsert(rel, def.table, rel.sys_id);
+                    this.currentRecordLog.related_migrated++;
+
+                } catch (e) {
+                    gs.warn("M2M migration failed: " + def.table + " — " + e);
+                }
+            }
+        }
+    },
+
+    safeUpsert: function(record, table, sysId) {
+
+        var gr     = new GlideRecordSecure(table);
+        var exists = sysId && gr.get(sysId);
+
+        if (!exists) {
+            gr.initialize();
+            if (sysId) gr.setNewGuidValue(sysId);
+        }
+
+        for (var field in record) {
+
+            if (!gr.isValidField(field)) continue;
+            if (field === "sys_id") continue;
+
+            var value = record[field];
+            if (value && typeof value === "object" && value.value !== undefined)
+                value = value.value;
+
+            try { gr.setValue(field, value); } catch (e) {}
+        }
+
+        var result = exists ? gr.update() : gr.insert();
+		// =====================================================
+// Preserve original source number
+// =====================================================
+
+try {
+
+    if (
+        source &&
+        source.number &&
+        gr.isValidField('number')
+    ) {
+
+        this._preserveOriginalNumber(
+            table,
+            inserted,
+            source.number
+        );
+    }
+
+} catch (numEx) {
+
+    gs.warn(
+        'Number preservation failed for ' +
+        table +
+        ': ' +
+        numEx.message
+    );
+}
+
+        /* ★ v30: diag log for the UR table specifically so we can see
+           if the insert/update is silently returning empty. */
+        if (table === "universal_request") {
+            this.logStep("  [UR-DIAG] safeUpsert universal_request: " +
+                          (exists ? "UPDATE" : "INSERT") +
+                          " sysId='" + sysId + "' returned: '" + result + "'");
+        }
+
+        /* ★ v36 — POST-INSERT NUMBER PRESERVATION
+           ServiceNow blocks setValue('number', X) on cross-scope INSERT but
+           may allow it on UPDATE. After a successful insert where the source
+           record had a 'number' value, re-fetch the new record and try to
+           overwrite the auto-generated number with the source value.
+
+           Three possible outcomes per attempt:
+             a) Update setValue is also blocked → silent fail, target keeps
+                auto-generated number (no worse than before v36)
+             b) Update succeeds and number is preserved → migration fidelity
+                improved
+             c) Table doesn't have a number field → skipped
+
+           Failure here is non-fatal: the record migrated, only its number
+           differs from source. */
+        if (!exists && result && record && record.number) {
+
+            var srcNumber = record.number;
+            if (srcNumber && typeof srcNumber === "object" && srcNumber.value !== undefined)
+                srcNumber = srcNumber.value;
+
+            if (srcNumber) {
+                try {
+                    var fix = new GlideRecordSecure(table);
+                    if (fix.get(result) && fix.isValidField("number")) {
+
+                        var beforeNum = fix.getValue("number");
+
+                        /* Skip if already correct (some tables may have
+                           accepted the insert-time setValue) */
+                        if (beforeNum !== String(srcNumber)) {
+                            fix.setValue("number", srcNumber);
+                            var fixResult = fix.update();
+
+                            /* Re-read to confirm what stuck */
+                            var verify = new GlideRecordSecure(table);
+                            verify.get(result);
+                            var afterNum = verify.getValue("number");
+
+                            if (afterNum === String(srcNumber)) {
+                                if (!this._numberPreservedCount) this._numberPreservedCount = 0;
+                                this._numberPreservedCount++;
+                                if (this.DEBUG && this._numberPreservedCount <= 3) {
+                                    this.logStep("  [NUM] " + table + ": preserved source number '" +
+                                                  srcNumber + "' (was auto-assigned '" + beforeNum + "')");
+                                }
+                            } else {
+                                if (!this._numberBlockedCount) this._numberBlockedCount = 0;
+                                this._numberBlockedCount++;
+                                if (this.DEBUG && this._numberBlockedCount <= 3) {
+                                    this.logStep("  [NUM] " + table + ": number write blocked — wanted '" +
+                                                  srcNumber + "', stayed '" + afterNum + "'");
+                                }
+                            }
+                        }
+                    }
+                } catch (eNum) {
+                    if (this.DEBUG) this.logStep("  [NUM] " + table + ": exception during number-fix: " + eNum);
+                }
+            }
+        }
+
+        return result;
+    },
+
+    _remapChildRefs: function(child, table, depth, skipFields) {
+
+        depth      = depth || 1;
+        skipFields = skipFields || {};
+
+        var refFields = this._getCachedRefFields(table);
+
+        for (var i = 0; i < refFields.length; i++) {
+
+            var rf = refFields[i];
+            if (!rf.refTable) continue;
+            if (skipFields[rf.field]) continue;
+
+            var src = this.normalizeRef(child[rf.field]);
+            if (!src) continue;
+
+            var mapped = this._resolveRefForRelated(rf.refTable, src, depth);
+            child[rf.field] = mapped || '';
+        }
+
+        return child;
+    },
+
+    normalizeRef: function(val) {
+        if (!val) return "";
+        if (typeof val === "object" && val.value !== undefined)
+            return String(val.value).trim();
+        return String(val).trim();
+    },
+
+    logStep: function(msg) {
+        this.executionLogs.push(msg);
+        gs.info(msg);
+    },
+
+    _getCachedRefFields: function(table) {
+
+        if (!table) return [];
+        if (!this._cacheRefFields) this._cacheRefFields = {};
+        if (this._cacheRefFields[table]) return this._cacheRefFields[table];
+
+        var refs = this.getReferenceFields(table) || [];
+        this._cacheRefFields[table] = refs;
+        return refs;
+    },
+
+    _ensureUserExists: function(username) {
+
+        if (!username) return "";
+        if (!this._cacheUserNameExists) this._cacheUserNameExists = {};
+        if (this._cacheUserNameExists[username]) return this._cacheUserNameExists[username];
+
+        var gr = new GlideRecordSecure("sys_user");
+        gr.addQuery("user_name", username);
+        gr.setLimit(1);
+        gr.query();
+
+        if (gr.next()) {
+            var id = gr.getUniqueValue();
+            this._cacheUserNameExists[username] = id;
+            return id;
+        }
+
+        var user = new GlideRecordSecure("sys_user");
+        user.initialize();
+        user.setValue("user_name", username);
+        user.setValue("name",      username);
+        user.setValue("active",    true);
+
+        var newId = user.insert();
+        this._cacheUserNameExists[username] = newId;
+        return newId;
+    },
+
+    migrateHistorySetsFor: function(table, sourceId, targetId) {
+        /* Stub */
+    },
+
+    _migrateHistoryLinesForSet: function(sourceSetId, targetSetId) {
+
+        var lines = this.fetchChildren("sys_history_line", "set", "", sourceSetId);
+
+        for (var i = 0; i < lines.length; i++) {
+
+            var line = lines[i];
+
+            try {
+                var copy = {};
+                for (var k in line) copy[k] = line[k];
+                copy.set = targetSetId;
+                this.safeUpsert(copy, "sys_history_line", line.sys_id);
+            } catch (e) {
+                gs.warn("History line migration failed");
+            }
+        }
+    },
+
+    _incrementProgress: function() {
+        this.progress.processed++;
+        if (this.progress.total > 0) {
+            this.progress.percent =
+                Math.round((this.progress.processed / this.progress.total) * 100);
+        }
+    },
+
+    _ensureRecordLog: function() {
+        if (!this.currentRecordLog) {
+            this.currentRecordLog = {
+                references_migrated: 0, references_failed: 0,
+                related_migrated:    0, related_failed:    0,
+                audit_migrated:      0, audit_failed:      0,
+                journal_migrated:    0, journal_failed:    0,
+                email_migrated:      0, email_failed:      0,
+                attachments_copied:  0,
+                errors:              []
+            };
+        }
+    },
+
+    _postMigrationFixup: function(table, targetId) {
+        /* ★ PERF v24: This was doing a GlideRecord.get + .update with no
+           actual field changes — a wasted read+write per record.
+           Made into a no-op. Kept the function in case something later
+           needs to hook in. */
+        return;
+    },
+
+    /* =====================================================
+       Verify what landed in any discovered M2M after migration.
+    ===================================================== */
+    verifyRelatedM2M: function(parentTable, targetTaskId) {
+
+        var report  = [];
+        var m2mList = this._discoverM2MTables(parentTable);
+
+        for (var i = 0; i < m2mList.length; i++) {
+
+            var cfg = m2mList[i];
+            if (!this._tableExists(cfg.table)) {
+                report.push(cfg.name + " — table " + cfg.table + " not present");
+                continue;
+            }
+
+            var gr = new GlideRecordSecure(cfg.table);
+            gr.addQuery(cfg.taskField, targetTaskId);
+            gr.query();
+
+            var count = 0;
+            var rows  = [];
+            while (gr.next()) {
+                count++;
+                rows.push(gr.getValue(cfg.refField));
+            }
+
+            report.push(
+                cfg.name + " (" + cfg.table + "): " + count + " row(s) — " +
+                (rows.length ? rows.join(", ") : "(none)")
+            );
+        }
+
+        gs.info("=== Related M2M verification for " + targetTaskId + " ===\n" + report.join("\n"));
+        return report;
+    },
+
+    /* =====================================================
+       MAIN ENTRY
+    ===================================================== */
+    migrateRecord: function(sourceUrl, username, password, table, sysId) {
+
+        try {
+
+            this.startTime   = new Date().getTime();
+            this.SOURCE_URL  = sourceUrl.replace(/\/+$/, '');
+            this.SOURCE_USER = username;
+            this.SOURCE_PSWD = password;
+
+            this.executionLogs = [];
+            this._ensureRecordLog();
+            this._deepStats    = { migrated: 0, skipped: 0, capped: false };
+            this._refDeepDepth = 0;
+
+            /* ★ v22: Cache lifecycle.
+               When KEEP_CACHES_ACROSS_CALLS = true (batch mode), only the
+               per-record state is reset. Schema/discovery/user/source-record
+               caches survive into the next record's migration. */
+            if (!this.KEEP_CACHES_ACROSS_CALLS) {
+                this._refDeepDone           = {};
+                this._cacheSourceRecord     = {};
+                this._cacheFetchChildren    = {};
+                this._cacheRestQuery        = {};
+                this._cacheTableExists      = {};
+                this._cacheGuessTableField  = {};
+                this._activityStreamDone    = {};
+            } else {
+                
+                this._refDeepDone        = {};
+                this._activityStreamDone = {};
+                this._cacheFetchChildren = {};
+                this._cacheRestQuery     = {};
+            }
+
+            /* Loud warnings if user enabled the dangerous flags */
+            if (this.USER_CHAIN.migrateGroupMemberships) {
+                gs.warn("⚠⚠⚠ USER_CHAIN.migrateGroupMemberships=true — " +
+                         "users will be added to source-side groups on target. " +
+                         "Privilege escalation risk. Confirm this is intentional.");
+            }
+            if (this.USER_CHAIN.migrateRoles) {
+                gs.warn("⚠⚠⚠ USER_CHAIN.migrateRoles=true — " +
+                         "users will receive source-side roles on target. " +
+                         "Privilege escalation risk. Confirm this is intentional.");
+            }
+            if (this.USER_CHAIN.managerChainDepth > 1) {
+                gs.warn("⚠ USER_CHAIN.managerChainDepth=" + this.USER_CHAIN.managerChainDepth +
+                         " — manager chain will walk multiple levels. May pull entire org.");
+            }
+
+            if (!gs.hasRole("admin")) {
+                gs.error("❌ dm_test requires admin role. Running user '" +
+                          gs.getUserName() + "' is not admin. Aborting.");
+                throw "dm_test requires admin role";
+            }
+
+            /* ★ v33: one-time warning per execution */
+            if (!this._brWarningShown) {
+                this._brWarningShown = true;
+                gs.warn("⚠ dm_test v36 (TraceNow scoped, admin-only build) — " +
+                         "business rules, workflows, notifications, SLAs WILL fire " +
+                         "on every insert because setWorkflow suppression is unavailable " +
+                         "from a scoped app. Confirm email/notifications/workflows are " +
+                         "paused on target before running large batches.");
+            }
+
+            this.logStep("]]>🚀<![CDATA[ START MIGRATION: " + table + "/" + sysId);
+
+            /* 1. Main record + all its reference fields resolved/migrated */
+            var targetId = this.migrateWithDependencies(table, sysId, 0);
+            if (!targetId) throw "Primary record migration failed";
+
+            /* 2. Lateral task references (problem_id, change_request, etc.)
+                  — these are reference fields on the main record */
+            this.migrateTaskRelationships(table, sysId, targetId);
+            this.migrateRelatedM2M(table, sysId, targetId);
+            this.migrateRelatedReferenceFields(table, sysId, targetId);
+            this.migrateDocumentIdRelations(table, sysId, targetId);
+            this.migrateRelatedLists(table, sysId, targetId);
+            this.copyAttachments(table, sysId, targetId);
+            this.insertSLAs(sysId, targetId);
+            this.migrateM2MRelations(table, sysId, targetId);
+            this.migrateActivityStreamFor(table, sysId, targetId);
+
+            this._postMigrationFixup(table, targetId);
+
+            this.endTime      = new Date().getTime();
+            this.durationMs   = this.endTime - this.startTime;
+            this.durationText = (this.durationMs / 1000).toFixed(2) + " seconds";
+
+            this.logStep("✅ Migration completed in " + this.durationText);
+
+            /* ★ v36 — number preservation summary */
+            var nP = this._numberPreservedCount || 0;
+            var nB = this._numberBlockedCount   || 0;
+            if (nP > 0 || nB > 0) {
+                this.logStep("   [NUM] Number preservation: " + nP +
+                              " preserved, " + nB + " blocked");
+            }
+
+            if (this.DEEP_RECURSION_ENABLED) {
+                this.logStep("Deep recursion: " + this._deepStats.migrated +
+                              " task-record(s) recursed" +
+                              (this._deepStats.capped ? " (CAPPED at " + this.MAX_DEEP_RECORDS + ")" : ""));
+            }
+
+            if (this.DEBUG) this.verifyRelatedM2M(table, targetId);
+
+            return targetId;
+
+        } catch (e) {
+            gs.error("❌ Migration failed: " + e);
+            return "";
+        }
+    },
+    migrateRecords: function(sourceUrl, username, password, table, sysIds) {
+
+        if (!sysIds || sysIds.length === 0) {
+            return { total: 0, success: 0, failed: 0, durationMs: 0,
+                     durationText: "0.00 seconds", results: [] };
+        }
+
+        var batchStart = new Date().getTime();
+
+        /* Save flag state so caller's setting is preserved */
+        var prevFlag = this.KEEP_CACHES_ACROSS_CALLS;
+        this.KEEP_CACHES_ACROSS_CALLS = true;
+
+        /* Initialize the cross-call caches up-front so the FIRST record
+           also gets the benefit if they haven't been set yet */
+        if (!this._cacheSourceRecord)    this._cacheSourceRecord    = {};
+        if (!this._cacheTableExists)     this._cacheTableExists     = {};
+        if (!this._cacheGuessTableField) this._cacheGuessTableField = {};
+        if (!this._cacheHierarchy)       this._cacheHierarchy       = {};
+        if (!this._cacheRefFields)       this._cacheRefFields       = {};
+        if (!this._cacheNaturalKey)      this._cacheNaturalKey      = {};
+        if (!this._cacheUserNameExists)  this._cacheUserNameExists  = {};
+        if (!this._cacheM2MDiscovery)    this._cacheM2MDiscovery    = {};
+        if (!this._cacheTaskRelDiscovery) this._cacheTaskRelDiscovery = {};
+        if (!this._cacheTablesReferencing) this._cacheTablesReferencing = {};
+        /* _sysIdLookup and _migratedRecords also survive batch so a
+           reference shared by two records is resolved once */
+        if (!this._sysIdLookup)     this._sysIdLookup     = {};
+        if (!this._migratedRecords) this._migratedRecords = {};
+        if (!this._visited)         this._visited         = {};
+
+        var results = [];
+        var success = 0;
+        var failed  = 0;
+
+        gs.info("]]>📦<![CDATA[ BATCH MIGRATION START — " + sysIds.length + " record(s) of " + table);
+
+        for (var i = 0; i < sysIds.length; i++) {
+
+            var sid = sysIds[i];
+            if (!sid) { failed++; continue; }
+
+            var recStart = new Date().getTime();
+            var tgt      = '';
+            var ok       = false;
+
+            try {
+                tgt = this.migrateRecord(sourceUrl, username, password, table, sid);
+                if (tgt) { ok = true; success++; }
+                else     { failed++; }
+            } catch (e) {
+                gs.error("Batch item failed: " + sid + " — " + e);
+                failed++;
+            }
+
+            var recMs = new Date().getTime() - recStart;
+
+            results.push({
+                sourceId:     sid,
+                targetId:     tgt,
+                success:      ok,
+                durationMs:   recMs,
+                durationText: (recMs / 1000).toFixed(2) + "s"
+            });
+
+            gs.info("  [" + (i + 1) + "/" + sysIds.length + "] " +
+                     (ok ? "✔" : "✗") + " " + sid +
+                     " — " + (recMs / 1000).toFixed(2) + "s" +
+                     " (running total: ok=" + success + " fail=" + failed + ")");
+        }
+
+        /* Restore caller's flag */
+        this.KEEP_CACHES_ACROSS_CALLS = prevFlag;
+
+        var batchMs   = new Date().getTime() - batchStart;
+        var avgMs     = batchMs / sysIds.length;
+        var summary = {
+            total:        sysIds.length,
+            success:      success,
+            failed:       failed,
+            durationMs:   batchMs,
+            durationText: (batchMs / 1000).toFixed(2) + " seconds",
+            avgPerRecord: (avgMs / 1000).toFixed(2) + " seconds",
+            results:      results
+        };
+
+        gs.info("]]>📦<![CDATA[ BATCH MIGRATION COMPLETE — " + success + "/" + sysIds.length +
+                 " succeeded in " + summary.durationText +
+                 " (avg " + summary.avgPerRecord + " per record)");
+
+        return summary;
+    },
+    migrateMixedRecords: function(sourceUrl, username, password, items, options) {
+
+        if (!items || items.length === 0) {
+            return { total: 0, success: 0, failed: 0, durationMs: 0,
+                     durationText: "0.00 seconds", byTable: {}, results: [] };
+        }
+
+        options = options || {};
+        var sortByTable = (options.sortByTable !== false);   // default true
+        var stopOnError = options.stopOnError === true;      // default false
+        var onProgress  = (typeof options.onProgress === "function") ? options.onProgress : null;
+
+        /* Validate items */
+        var clean = [];
+        for (var v = 0; v < items.length; v++) {
+            var it = items[v];
+            if (!it || !it.table || !it.sysId) {
+                gs.warn("⚠ migrateMixedRecords: skipping invalid item at index " + v);
+                continue;
+            }
+            clean.push({
+                table: String(it.table).trim(),
+                sysId: String(it.sysId).trim()
+            });
+        }
+
+        if (clean.length === 0) {
+            return { total: 0, success: 0, failed: 0, durationMs: 0,
+                     durationText: "0.00 seconds", byTable: {}, results: [] };
+        }
+
+        /* Sort by table for cache locality — same-table records benefit
+           massively from each other's already-resolved refs */
+        if (sortByTable) {
+            clean.sort(function(a, b) {
+                if (a.table < b.table) return -1;
+                if (a.table > b.table) return  1;
+                return 0;
+            });
+        }
+
+        var batchStart = new Date().getTime();
+        var prevFlag   = this.KEEP_CACHES_ACROSS_CALLS;
+        this.KEEP_CACHES_ACROSS_CALLS = true;
+
+        /* Pre-warm cross-call caches */
+        if (!this._cacheSourceRecord)      this._cacheSourceRecord      = {};
+        if (!this._cacheTableExists)       this._cacheTableExists       = {};
+        if (!this._cacheGuessTableField)   this._cacheGuessTableField   = {};
+        if (!this._cacheHierarchy)         this._cacheHierarchy         = {};
+        if (!this._cacheRefFields)         this._cacheRefFields         = {};
+        if (!this._cacheNaturalKey)        this._cacheNaturalKey        = {};
+        if (!this._cacheUserNameExists)    this._cacheUserNameExists    = {};
+        if (!this._cacheM2MDiscovery)      this._cacheM2MDiscovery      = {};
+        if (!this._cacheTaskRelDiscovery)  this._cacheTaskRelDiscovery  = {};
+        if (!this._cacheTablesReferencing) this._cacheTablesReferencing = {};
+        if (!this._sysIdLookup)            this._sysIdLookup            = {};
+        if (!this._migratedRecords)        this._migratedRecords        = {};
+        if (!this._visited)                this._visited                = {};
+
+        var results = [];
+        var success = 0;
+        var failed  = 0;
+        var byTable = {};        // per-table tally
+
+        /* Summarise composition */
+        var compStr = (function(arr) {
+            var counts = {};
+            for (var i = 0; i < arr.length; i++) counts[arr[i].table] = (counts[arr[i].table] || 0) + 1;
+            var parts = [];
+            for (var k in counts) parts.push(k + ":" + counts[k]);
+            return parts.join(", ");
+        })(clean);
+
+        gs.info("]]>📦<![CDATA[ MIXED BATCH MIGRATION START — " + clean.length +
+                " record(s) across multiple tables: " + compStr);
+
+        for (var i = 0; i < clean.length; i++) {
+
+            var item = clean[i];
+            if (!byTable[item.table]) byTable[item.table] = { ok: 0, fail: 0 };
+
+            var recStart = new Date().getTime();
+            var tgt      = '';
+            var ok       = false;
+            var errMsg   = '';
+
+            try {
+                tgt = this.migrateRecord(sourceUrl, username, password,
+                                          item.table, item.sysId);
+                if (tgt) { ok = true; success++; byTable[item.table].ok++; }
+                else     { failed++;  byTable[item.table].fail++; errMsg = "migrateRecord returned empty"; }
+            } catch (e) {
+                gs.error("Mixed batch item failed: " + item.table + "/" +
+                          item.sysId + " — " + e);
+                failed++;
+                byTable[item.table].fail++;
+                errMsg = String(e);
+            }
+
+            var recMs = new Date().getTime() - recStart;
+
+            var resultEntry = {
+                table:        item.table,
+                sourceId:     item.sysId,
+                targetId:     tgt,
+                success:      ok,
+                error:        errMsg,
+                durationMs:   recMs,
+                durationText: (recMs / 1000).toFixed(2) + "s"
+            };
+            results.push(resultEntry);
+
+            gs.info("  [" + (i + 1) + "/" + clean.length + "] " +
+                     (ok ? "✔" : "✗") + " " + item.table + "/" + item.sysId +
+                     " — " + (recMs / 1000).toFixed(2) + "s" +
+                     " (running: ok=" + success + " fail=" + failed + ")");
+
+            if (onProgress) {
+                try { onProgress(i + 1, clean.length, item, resultEntry); }
+                catch (eP) { gs.warn("onProgress callback threw: " + eP); }
+            }
+
+            if (stopOnError && !ok) {
+                gs.warn("⚠ stopOnError = true — aborting batch after first failure");
+                break;
+            }
+        }
+
+        this.KEEP_CACHES_ACROSS_CALLS = prevFlag;
+
+        var batchMs = new Date().getTime() - batchStart;
+        var avgMs   = batchMs / clean.length;
+
+        var summary = {
+            total:        clean.length,
+            success:      success,
+            failed:       failed,
+            durationMs:   batchMs,
+            durationText: (batchMs / 1000).toFixed(2) + " seconds",
+            avgPerRecord: (avgMs / 1000).toFixed(2) + " seconds",
+            byTable:      byTable,
+            results:      results
+        };
+
+        gs.info("]]>📦<![CDATA[ MIXED BATCH COMPLETE — " + success + "/" + clean.length +
+                 " succeeded in " + summary.durationText +
+                 " (avg " + summary.avgPerRecord + " per record)");
+
+        /* Per-table breakdown to log */
+        for (var t in byTable) {
+            gs.info("    " + t + ": ok=" + byTable[t].ok + " fail=" + byTable[t].fail);
+        }
+
+        return summary;
+    },
+
+    QUEUE_TABLE: "u_dm_migration_queue",   /* preferred custom table */
+    QUEUE_FALLBACK_TABLE: "sys_user_preference",
+    QUEUE_FALLBACK_PREFIX: "dm_migration_queue.",
+
+    _getQueueTable: function() {
+        if (this._resolvedQueueTable) return this._resolvedQueueTable;
+        if (this._tableExists(this.QUEUE_TABLE)) {
+            this._resolvedQueueTable = { name: this.QUEUE_TABLE, custom: true };
+        } else {
+            this._resolvedQueueTable = { name: this.QUEUE_FALLBACK_TABLE, custom: false };
+            this.logStep("ℹ Queue: using " + this.QUEUE_FALLBACK_TABLE +
+                          " (custom table " + this.QUEUE_TABLE + " not present)");
+        }
+        return this._resolvedQueueTable;
+    },
+
+    queueMigration: function(table, sysIds) {
+
+        if (!sysIds || sysIds.length === 0) return 0;
+        var q = this._getQueueTable();
+        var added = 0;
+
+        for (var i = 0; i < sysIds.length; i++) {
+
+            var sid = String(sysIds[i] || "").trim();
+            if (!sid) continue;
+
+            try {
+
+                if (q.custom) {
+
+                    /* Dedup */
+                    var dup = new GlideRecordSecure(q.name);
+                    dup.addQuery("source_table",  table);
+                    dup.addQuery("source_sys_id", sid);
+                    dup.setLimit(1);
+                    dup.query();
+                    if (dup.next()) continue;
+
+                    var gr = new GlideRecordSecure(q.name);
+                    gr.initialize();
+                    gr.setValue("source_table",  table);
+                    gr.setValue("source_sys_id", sid);
+                    gr.setValue("status",        "pending");
+                    if (gr.insert()) added++;
+
+                } else {
+
+                    /* sys_user_preference fallback. Key format:
+                       dm_migration_queue.<table>.<sys_id> = "pending" */
+                    var prefName = this.QUEUE_FALLBACK_PREFIX + table + "." + sid;
+
+                    var dup2 = new GlideRecordSecure(q.name);
+                    dup2.addQuery("name", prefName);
+                    dup2.setLimit(1);
+                    dup2.query();
+                    if (dup2.next()) continue;
+
+                    var pr = new GlideRecordSecure(q.name);
+                    pr.initialize();
+                    pr.setValue("name",  prefName);
+                    pr.setValue("value", "pending");
+                    pr.setValue("type",  "string");
+                    if (pr.insert()) added++;
+                }
+
+            } catch (eQ) {
+                gs.warn("Queue insert failed for " + sid + ": " + eQ);
+            }
+        }
+
+        gs.info("]]>📋<![CDATA[ Queued " + added + " of " + sysIds.length + " for " + table);
+        return added;
+    },
+    queueMixedMigration: function(items) {
+
+        if (!items || items.length === 0) return 0;
+
+        /* Group by table and delegate to queueMigration for each */
+        var grouped = {};
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            if (!it || !it.table || !it.sysId) continue;
+            if (!grouped[it.table]) grouped[it.table] = [];
+            grouped[it.table].push(it.sysId);
+        }
+
+        var total = 0;
+        for (var t in grouped) {
+            total += this.queueMigration(t, grouped[t]);
+        }
+
+        gs.info("]]>📋<![CDATA[ Total queued across all tables: " + total);
+        return total;
+    },
+
+    processMigrationQueue: function(sourceUrl, username, password, batchSize) {
+
+        batchSize = batchSize || 50;
+
+        var q       = this._getQueueTable();
+        var pending = [];
+
+        if (q.custom) {
+
+            var gr = new GlideRecordSecure(q.name);
+            gr.addQuery("status", "pending");
+            gr.orderBy("sys_created_on");
+            gr.setLimit(batchSize);
+            gr.query();
+            while (gr.next()) {
+                pending.push({
+                    queueId: gr.getUniqueValue(),
+                    table:   gr.getValue("source_table"),
+                    sysId:   gr.getValue("source_sys_id")
+                });
+            }
+
+        } else {
+
+            var pr = new GlideRecordSecure(q.name);
+            pr.addQuery("name", "STARTSWITH", this.QUEUE_FALLBACK_PREFIX);
+            pr.addQuery("value", "pending");
+            pr.orderBy("sys_created_on");
+            pr.setLimit(batchSize);
+            pr.query();
+            while (pr.next()) {
+                /* Parse "dm_migration_queue.<table>.<sys_id>" */
+                var n = pr.getValue("name") || "";
+                var rest = n.substring(this.QUEUE_FALLBACK_PREFIX.length);
+                var dot  = rest.indexOf(".");
+                if (dot === -1) continue;
+                pending.push({
+                    queueId: pr.getUniqueValue(),
+                    table:   rest.substring(0, dot),
+                    sysId:   rest.substring(dot + 1)
+                });
+            }
+        }
+
+        if (pending.length === 0) {
+            gs.info("]]>📋<![CDATA[ Queue empty");
+            return { processed: 0, success: 0, failed: 0 };
+        }
+
+        gs.info("]]>📋<![CDATA[ Processing " + pending.length + " queued migration(s)");
+
+        /* Mark all as running so a parallel scheduled job doesn't pick them up */
+        for (var m = 0; m < pending.length; m++) {
+            this._updateQueueStatus(q, pending[m].queueId, "running");
+        }
+
+        /* Group by table so caches stay warm */
+        var byTable = {};
+        for (var p = 0; p < pending.length; p++) {
+            var t = pending[p].table;
+            if (!byTable[t]) byTable[t] = [];
+            byTable[t].push(pending[p]);
+        }
+
+        var success = 0;
+        var failed  = 0;
+
+        this.KEEP_CACHES_ACROSS_CALLS = true;
+
+        for (var tbl in byTable) {
+            var group = byTable[tbl];
+
+            for (var g = 0; g < group.length; g++) {
+
+                var item = group[g];
+                var ok   = false;
+
+                try {
+                    var tgt = this.migrateRecord(sourceUrl, username, password,
+                                                  item.table, item.sysId);
+                    if (tgt) ok = true;
+                } catch (e) {
+                    gs.error("Queue item failed: " + item.sysId + " — " + e);
+                }
+
+                this._updateQueueStatus(q, item.queueId, ok ? "done" : "failed");
+                if (ok) success++; else failed++;
+            }
+        }
+
+        gs.info("]]>📋<![CDATA[ Queue batch complete — success:" + success + " failed:" + failed);
+
+        return {
+            processed: pending.length,
+            success:   success,
+            failed:    failed
+        };
+    },
+
+    _updateQueueStatus: function(q, queueId, status) {
+        try {
+            var gr = new GlideRecordSecure(q.name);
+            if (!gr.get(queueId)) return;
+            if (q.custom) {
+                gr.setValue("status", status);
+            } else {
+                gr.setValue("value", status);
+            }
+            gr.update();
+        } catch (e) {
+            gs.warn("Queue status update failed: " + e);
+        }
+    },
+
+    getQueueStatus: function() {
+
+        var q = this._getQueueTable();
+        var stats = { pending: 0, running: 0, done: 0, failed: 0, total: 0 };
+
+        var gr = new GlideRecordSecure(q.name);
+        if (q.custom) {
+            gr.query();
+        } else {
+            gr.addQuery("name", "STARTSWITH", this.QUEUE_FALLBACK_PREFIX);
+            gr.query();
+        }
+
+        while (gr.next()) {
+            var status = q.custom ? gr.getValue("status") : gr.getValue("value");
+            if (stats.hasOwnProperty(status)) stats[status]++;
+            stats.total++;
+        }
+
+        gs.info("]]>📊<![CDATA[ Queue: pending=" + stats.pending + " running=" + stats.running +
+                 " done=" + stats.done + " failed=" + stats.failed +
+                 " total=" + stats.total);
+
+        return stats;
+    },
+
+    /* Reset stuck "running" items back to "pending" — useful if a previous
+       scheduled job died mid-batch and items are left in limbo. */
+    requeueStuckItems: function(olderThanMinutes) {
+
+        olderThanMinutes = olderThanMinutes || 30;
+
+        var q = this._getQueueTable();
+        var gr = new GlideRecordSecure(q.name);
+
+        if (q.custom) {
+            gr.addQuery("status", "running");
+            gr.addQuery("sys_updated_on", "<", gs.minutesAgo(olderThanMinutes));
+        } else {
+            gr.addQuery("name", "STARTSWITH", this.QUEUE_FALLBACK_PREFIX);
+            gr.addQuery("value", "running");
+            gr.addQuery("sys_updated_on", "<", gs.minutesAgo(olderThanMinutes));
+        }
+        gr.query();
+
+        var reset = 0;
+        while (gr.next()) {
+            this._updateQueueStatus(q, gr.getUniqueValue(), "pending");
+            reset++;
+        }
+
+        gs.info("]]>🔁<![CDATA[ Requeued " + reset + " stuck item(s) older than " + olderThanMinutes + " min");
+        return reset;
+    },
+/* =====================================================
+   PRESERVE ORIGINAL NUMBER AFTER INSERT
+   ===================================================== */
+_preserveOriginalNumber: function(table, targetSysId, sourceNumber) {
+
+    try {
+
+        if (!sourceNumber || !targetSysId)
+            return false;
+
+        var gr = new GlideRecord(table);
+
+        if (!gr.get(targetSysId))
+            return false;
+
+        // Skip if table has no number field
+        if (!gr.isValidField('number'))
+            return false;
+
+        var currentNumber = gr.getValue('number');
+
+        // Already correct
+        if (currentNumber == sourceNumber)
+            return true;
+
+        // Disable engines/workflow during correction
+        gr.setWorkflow(false);
+        gr.autoSysFields(false);
+        gr.setUseEngines(false);
+
+        // Force original number
+        gr.setValue('number', sourceNumber);
+
+        gr.update();
+
+        // Verify
+        var verify = new GlideRecord(table);
+
+        if (verify.get(targetSysId)) {
+
+            var finalNumber = verify.getValue('number');
+
+            if (finalNumber == sourceNumber) {
+
+                gs.info(
+                    '[NUM PRESERVED] ' +
+                    table +
+                    ' -> ' +
+                    sourceNumber
+                );
+
+                return true;
+            }
+
+            gs.warn(
+                '[NUM FAILED] Wanted=' +
+                sourceNumber +
+                ' Actual=' +
+                finalNumber
+            );
+        }
+
+    } catch (ex) {
+
+        gs.error(
+            '[NUM PRESERVATION ERROR] ' +
+            ex.message
+        );
+    }
+
+    return false;
+},
+    type: "dm_test"
+
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 18:12:18</sys_created_on>
+        <sys_id>a9a9a6a4c3d5031093c8b71d05013118</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>dm_test</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sys_script_include_a9a9a6a4c3d5031093c8b71d05013118</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 18:12:18</sys_updated_on>
+    </sys_script_include>
+</record_update>

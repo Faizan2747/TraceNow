@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function($scope, $rootScope, $window, spUtil) {
+  var c = this;
+  
+  c.activeTab = $window.sessionStorage.getItem('tracenow_active_tab') || 'dashboard';
+  c.viewingTableRecords = $window.sessionStorage.getItem('tracenow_viewing_records') === 'true';
+  
+  // --- REAL-TIME SIDEBAR BADGE LOGIC ---
+  c.queueCount = 0; 
+  if ($rootScope.tnQueue) {
+      c.queueCount = $rootScope.tnQueue.length;
+  }
+  $scope.$on('tracenow.queue_updated', function() {
+      c.queueCount = $rootScope.tnQueue ? $rootScope.tnQueue.length : 0;
+  });
+
+  // --- WIDGET MOUNTING ---
+  c.reloadWidgets = function() {
+    spUtil.get('tracenow-header').then(function(w) { c.headerWidget = w; });
+    spUtil.get('tracenow-dashboard').then(function(w) { c.dashboardWidget = w; });
+    spUtil.get('tracenow_connections').then(function(w) { c.connectionsWidget = w; });
+    spUtil.get('tracenow_browse_tables').then(function(w) { c.browseTablesWidget = w; });
+    spUtil.get('tracenow_record_browser').then(function(w) { c.recordBrowserWidget = w; });
+    spUtil.get('tracenow_migration_queue').then(function(w) { c.migrationQueueWidget = w; });
+  };
+
+  // --- ROUTING LOGIC ---
+  c.switchTab = function(tabName) {
+    c.activeTab = tabName;
+    $window.sessionStorage.setItem('tracenow_active_tab', tabName);
+    
+    if (tabName !== 'browse_tables') {
+      c.viewingTableRecords = false;
+      $window.sessionStorage.removeItem('tracenow_viewing_records');
+    }
+    
+    $rootScope.$broadcast('tracenow.view_changed', tabName);
+  };
+
+  $rootScope.$on('tracenow.table_selected', function(event, data) {
+    c.viewingTableRecords = true;
+    $window.sessionStorage.setItem('tracenow_viewing_records', 'true');
+  });
+
+  $rootScope.$on('tracenow.view_changed', function(event, destination) {
+    if (destination === 'browse_tables') {
+      c.viewingTableRecords = false;
+      $window.sessionStorage.removeItem('tracenow_viewing_records');
+      c.activeTab = 'browse_tables';
+      $window.sessionStorage.setItem('tracenow_active_tab', 'browse_tables');
+    }
+  });
+
+  $rootScope.$on('tracenow.refresh_all', function() {
+    c.reloadWidgets();
+  });
+
+  c.reloadWidgets();
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>/* ==========================================================================
+   WORKSPACE SHELL - MASTER LAYOUT
+   ========================================================================== */
+
+.tn-master-layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f8fafc;
+  overflow: hidden;
+}
+
+/* Header Area */
+.tn-header-slot {
+  flex-shrink: 0;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  z-index: 20;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+/* Main Body (Sidebar + Content) */
+.tn-shell-root {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   SIDEBAR NAVIGATION
+   ========================================================================== */
+
+.tn-shell-sidebar {
+  width: 240px;
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.tn-sidebar-top {
+  padding: 16px 0;
+  overflow-y: auto;
+}
+
+.tn-sidebar-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tn-sidebar-menu li {
+  margin: 4px 16px;
+}
+
+.tn-sidebar-menu li a {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s ease-in-out;
+}
+
+.tn-sidebar-menu li a:hover {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  text-decoration: none;
+}
+
+/* Active Tab State */
+.tn-sidebar-menu li.is-active a {
+  background-color: #eef2ff;
+  color: #4f46e5; /* Indigo Accent */
+}
+
+.tn-icon {
+  width: 24px;
+  font-size: 16px;
+  margin-right: 8px;
+  text-align: center;
+}
+
+/* Queue Badge Layout */
+.tn-menu-badge-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.tn-menu-badge {
+  background-color: #ef4444; /* Red badge */
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(239,68,68,0.3);
+}
+
+/* Sidebar Footer */
+.tn-sidebar-bottom {
+  padding: 16px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: center;
+  background-color: #f8fafc;
+}
+
+.tn-btn-utility {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.tn-btn-utility:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   MAIN CONTENT AREA
+   ========================================================================== */
+
+.tn-shell-main-content {
+  flex: 1;
+  background-color: #f8fafc; /* Light gray background to match Dashboard */
+  overflow-y: auto;
+  position: relative;
+}
+
+.tn-content-frame {
+  width: 100%;
+  height: 100%;
+}
+
+/* Prevent padding conflict for Browse Tables */
+.tn-browse-tables-wrapper {
+  padding: 0;
+}
+
+/* Smooth Tab Switching Animation */
+.tn-fade-in {
+  animation: tnFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes tnFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow_workspace_shell</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>TraceNow Workspace Shell</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+  /* Layout shell template orchestrator container */
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 17:05:05</sys_created_on>
+        <sys_id>3794ab70c35d831093c8b71d050131be</sys_id>
+        <sys_mod_count>17</sys_mod_count>
+        <sys_name>TraceNow Workspace Shell</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_3794ab70c35d831093c8b71d050131be</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-11 10:01:25</sys_updated_on>
+        <template><![CDATA[<div class="tn-master-layout">
+  
+  <div class="tn-header-slot">
+    <sp-widget widget="c.headerWidget"></sp-widget>
+  </div>
+
+  <div class="tn-shell-root">
+    
+    <div class="tn-shell-sidebar">
+      <div class="tn-sidebar-top">
+        <ul class="tn-sidebar-menu">
+          <li ng-class="{'is-active': c.activeTab === 'dashboard'}" ng-click="c.switchTab('dashboard')">
+            <a href="javascript:void(0)">
+              <i class="fa fa-th-large tn-icon"></i> Dashboard
+            </a>
+          </li>
+          <li ng-class="{'is-active': c.activeTab === 'connections'}" ng-click="c.switchTab('connections')">
+            <a href="javascript:void(0)">
+              <i class="fa fa-plug tn-icon"></i> Connections
+            </a>
+          </li>
+          <li ng-class="{'is-active': c.activeTab === 'browse_tables'}" ng-click="c.switchTab('browse_tables')">
+            <a href="javascript:void(0)">
+              <i class="fa fa-search tn-icon"></i> Browse Tables
+            </a>
+          </li>
+          <li ng-class="{'is-active': c.activeTab === 'queue'}" ng-click="c.switchTab('queue')">
+            <a href="javascript:void(0)" class="tn-menu-badge-container">
+              <span><i class="fa fa-shopping-cart tn-icon"></i> Queue</span>
+              <span class="tn-menu-badge" ng-if="c.queueCount > 0">{{c.queueCount}}</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+      
+      <div class="tn-sidebar-bottom">
+        <button class="tn-btn-utility" title="System Status Summary">
+          <i class="fa fa-pie-chart"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="tn-shell-main-content">
+      
+      <div class="tn-content-frame tn-fade-in" ng-show="c.activeTab === 'dashboard'">
+        <sp-widget widget="c.dashboardWidget"></sp-widget>
+      </div>
+
+      <div class="tn-content-frame tn-fade-in" ng-show="c.activeTab === 'connections'">
+        <sp-widget widget="c.connectionsWidget"></sp-widget>
+      </div>
+      
+      <div class="tn-content-frame tn-fade-in tn-browse-tables-wrapper" ng-show="c.activeTab === 'browse_tables' && !c.viewingTableRecords">
+        <sp-widget widget="c.browseTablesWidget"></sp-widget>
+      </div>
+      <div class="tn-content-frame tn-fade-in" ng-show="c.activeTab === 'browse_tables' && c.viewingTableRecords">
+        <sp-widget widget="c.recordBrowserWidget"></sp-widget>
+      </div>
+
+      <div class="tn-content-frame tn-fade-in" ng-show="c.activeTab === 'queue'">
+        <sp-widget widget="c.migrationQueueWidget"></sp-widget>
+      </div>
+
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>3794ab70c35d831093c8b71d050131be</id>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 17:05:05</sys_created_on>
+        <sys_id>3f94ebb0c35d831093c8b71d050131f5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 17:05:05</sys_updated_on>
+        <table>sp_widget</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
+</record_update>

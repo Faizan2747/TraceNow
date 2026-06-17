@@ -1,0 +1,887 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $rootScope, spUtil, $location, $timeout) {
+    var c = this;
+    c.searchText = '';
+    c.allSelected = false;
+    c.migrating = false;
+    c.exporting = false;
+    c.isLoadingRecords = false;
+
+    // Modal State Management
+    c.showPreviewModal = false;
+    c.loadingPreview = false;
+    c.previewNumber = '';
+    c.previewFields = [];
+
+    c.activeTableName = '';
+    c.activeTableLabel = '';
+
+    // Pagination controls
+    c.currentPage = 1;
+    c.pageSize = 10;
+
+    c.fetchRecords = function(tableName, tableLabel) {
+        c.searchText = '';
+        c.allSelected = false;
+        c.currentPage = 1;
+
+        c.activeTableName = tableName;
+        c.activeTableLabel = tableLabel;
+
+        c.server.get({
+            action: 'fetch_records',
+            table: tableName,
+            label: tableLabel
+        }).then(function(response) {
+            c.data.records = response.data.records;
+            c.data.tableName = response.data.tableName;
+            c.data.tableLabel = response.data.tableLabel;
+            c.data.totalRecords = response.data.totalRecords;
+            c.data.error = response.data.error;
+            c.data.activeInstance = response.data.activeInstance;
+        });
+    };
+
+    var urlParams = $location.search();
+    if (urlParams.table) {
+        c.fetchRecords(urlParams.table, urlParams.label || urlParams.table);
+    }
+
+    $rootScope.$on('tracenow.table_selected', function(event, target) {
+        $location.search('table', target.tableName);
+        $location.search('label', target.tableLabel);
+        c.fetchRecords(target.tableName, target.tableLabel);
+    });
+
+    $rootScope.$on('tracenow_connection_updated', function() {
+        var tableName = c.activeTableName || c.data.tableName || $location.search().table;
+        var tableLabel = c.activeTableLabel || c.data.tableLabel || $location.search().label;
+        if (!tableName) return;
+        c.fetchRecords(tableName, tableLabel);
+    });
+
+    c.numberOfPages = function(totalItems) {
+        return Math.ceil(totalItems / c.pageSize) || 1;
+    };
+
+    c.min = function(val1, val2) {
+        return Math.min(val1, val2);
+    };
+
+    c.goBack = function() {
+        $location.search('table', null);
+        $location.search('label', null);
+        $rootScope.$broadcast('tracenow.view_changed', 'browse_tables');
+    };
+
+    c.closeModal = function() {
+        c.showPreviewModal = false;
+        c.loadingPreview = false;
+        c.previewFields = [];
+    };
+
+    c.getSelectedRecords = function() {
+        return (c.data.records || []).filter(function(r) { return r.selected; });
+    };
+
+    c.clearSelection = function() {
+        c.allSelected = false;
+        angular.forEach(c.data.records, function(r) { r.selected = false; });
+    };
+
+    c.toggleAll = function() {
+        angular.forEach(c.data.records, function(r) { r.selected = c.allSelected; });
+    };
+
+    c.viewRecord = function(rec) {
+        var currentTable = c.activeTableName || c.data.tableName || $location.search().table;
+
+        if (!rec.sys_id || !currentTable) {
+            if (window.spUtil) spUtil.addErrorMessage("Unable to open preview: Missing record parameters.");
+            return;
+        }
+
+        c.previewNumber = rec.number || 'Details';
+        c.previewFields = [];
+        c.showPreviewModal = true;
+        c.loadingPreview = true;
+
+        c.server.get({
+            action: 'get_single_record_details',
+            table: currentTable,
+            sys_id: rec.sys_id
+        }).then(function(response) {
+            if (response.data && response.data.singleRecord && angular.isArray(response.data.singleRecord)) {
+                c.previewFields = response.data.singleRecord;
+            } else {
+                if (window.spUtil) spUtil.addErrorMessage("Could not parse fields for this record from the remote instance.");
+            }
+        }).catch(function(err) {
+            if (window.spUtil) spUtil.addErrorMessage("An unexpected server communication error occurred.");
+        }).finally(function() {
+            c.loadingPreview = false;
+        });
+    };
+
+    c.addToQueue = function() {
+        var currentTable = c.activeTableName || c.data.tableName || $location.search().table;
+        var currentLabel = c.activeTableLabel || c.data.tableLabel || $location.search().label;
+        var selectedRecords = c.getSelectedRecords();
+
+        if (selectedRecords.length > 0) {
+            $timeout(function() {
+                $rootScope.$broadcast('tracenow.add_to_queue', {
+                    table: currentTable,
+                    label: currentLabel,
+                    records: selectedRecords
+                });
+                if (window.spUtil) spUtil.addInfoMessage(selectedRecords.length + " record(s) added to queue.");
+                c.clearSelection(); 
+            });
+        }
+    };
+
+    c.migrateNow = function() {
+        var currentTable = c.activeTableName || c.data.tableName || $location.search().table;
+        var selected = c.getSelectedRecords();
+        if (selected.length === 0) return;
+        if (!confirm('Migrate ' + selected.length + ' selected record(s) now?')) return;
+
+        c.migrating = true;
+
+        var formattedRecords = selected.map(function(r) {
+            return {
+                sys_id: r.sys_id,
+                number: r.number,
+                tableName: currentTable
+            };
+        });
+
+        c.server.get({
+            action: 'run_migration',
+            groups: [{ tableName: currentTable, records: formattedRecords }]
+        }).then(function(response) {
+            c.migrating = false;
+            if (window.spUtil && spUtil.clearMessages) spUtil.clearMessages();
+
+            if (response.data.migrationSuccess) {
+                c.clearSelection();
+                var s = response.data.migrationSummary;
+                alert('✅ Migration complete!\n\n' + s.success + '/' + s.total + ' records succeeded.\nDuration: ' + s.durationText);
+            } else if (response.data.migrationSummary && response.data.migrationSummary.failed > 0) {
+                var s2 = response.data.migrationSummary;
+                alert('⚠️ Partial migration:\n' + s2.success + ' succeeded, ' + s2.failed + ' failed.');
+            } else {
+                alert('❌ Migration failed: ' + response.data.migrationError);
+            }
+        }).catch(function() {
+            c.migrating = false;
+            alert('❌ A server error occurred during runtime migration.');
+        });
+    };
+
+    // Export XML
+    c.exportXML = function() {
+        var selectedRecords = c.getSelectedRecords();
+        if (selectedRecords.length === 0) return;
+
+        c.exporting = true;
+        var sysIds = selectedRecords.map(function(r) { return r.sys_id; });
+        var currentTable = c.activeTableName || c.data.tableName || $location.search().table;
+
+        c.server.get({
+            action: 'export_async',
+            tableName: currentTable,
+            sysIds: sysIds
+        }).then(function(response) {
+            c.exporting = false;
+            c.clearSelection();
+            
+            var msg = "✅ Export queued in the background! It may take a few minutes for large records. Go to the Dashboard to download the file when it completes.";
+            if (window.spUtil) spUtil.addInfoMessage(msg);
+            alert(msg);
+        });
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-records-wrapper {
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.tn-back-link {
+  display: inline-block;
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+.tn-back-link:hover { text-decoration: underline; }
+.tn-back-link i { margin-right: 6px; font-size: 12px; }
+
+/* Header &amp; Badges */
+.tn-header-section { margin-bottom: 24px; }
+.tn-page-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+.tn-badges { display: flex; gap: 12px; }
+.tn-badge {
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.tn-badge-gray {
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+
+/* Search Bar */
+.tn-search-container {
+  position: relative;
+  margin-bottom: 24px;
+}
+.tn-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+}
+.tn-search-input {
+  width: 100%;
+  padding: 14px 16px 14px 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  outline: none;
+}
+
+/* Data Table */
+.tn-table-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.tn-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.tn-data-table th, .tn-data-table td {
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+.tn-data-table th {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 12px;
+}
+.tn-data-table tr:last-child td { border-bottom: none; }
+.tn-fw-600 { font-weight: 600; }
+.tn-state-text {
+  color: #3b82f6;
+  font-weight: 600;
+}
+.tn-icon-btn {
+  color: #3b82f6;
+  font-size: 16px;
+}
+.tn-icon-btn:hover { color: #1e40af; }
+.tn-no-data {
+  text-align: center;
+  color: #64748b;
+  padding: 32px !important;
+}
+
+/* Selection Bar */
+.tn-selection-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #f4f7fe; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 16px 24px; margin-bottom: 24px;
+}
+.tn-selection-count {
+    background: #1d4ed8; color: #fff; border-radius: 50%;
+    width: 36px; height: 36px; display: inline-flex;
+    align-items: center; justify-content: center; margin-right: 12px;
+}
+.tn-selection-actions { display: flex; gap: 12px; }
+.tn-btn-text { background: none; border: none; color: #64748b; }
+.tn-btn-queue { background: #fff; color: #1d4ed8; border: 1px solid #1d4ed8; border-radius: 20px; padding: 6px 16px; }
+.tn-btn-migrate { background: #1d4ed8; color: #fff; border: none; border-radius: 20px; padding: 6px 16px; }
+
+/* Pagination Wrapper Layout - Centered */
+.tn-pagination-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  padding: 12px 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.tn-pagination-info {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 400;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.tn-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tn-page-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease;
+}
+
+.tn-page-btn i {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tn-page-btn:hover:not([disabled]) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.tn-page-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.tn-page-current {
+  font-size: 14px;
+  font-weight: 400;
+  color: #1e293b;
+  padding: 0 4px;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow_record_browser</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>TraceNow Record Browser</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+// --- 1. DETERMINE ACTIVE CONNECTION OR LOCAL FALLBACK ---
+data.activeInstance = null;
+var isRemote = false;
+
+var preloadConn = new GlideRecord('x_1862238_tracenow_connections');
+preloadConn.addQuery('status', 'Active');
+preloadConn.query();
+
+if (preloadConn.next()) {
+    isRemote = true;
+    var preUrl = preloadConn.getValue('source_instance_url') || '';
+    if (preUrl.endsWith('/')) {
+        preUrl = preUrl.substring(0, preUrl.length - 1);
+    }
+    data.activeInstance = {
+        url: String(preUrl)
+    };
+} else {
+    isRemote = false;
+    data.activeInstance = {
+        url: gs.getProperty('glide.servlet.uri', '')
+    };
+}
+
+data.isRemote = isRemote; 
+
+if (!input) {
+    data.records = [];
+    return;
+}
+
+// --- 2. SINGLE RECORD PREVIEW HANDLER ---
+if (input.action === 'get_single_record_details') {
+    data.singleRecord = [];
+    var targetTable = input.table;
+    var targetSysId = input.sys_id;
+
+    if (targetTable && targetSysId) {
+        if (isRemote) {
+            var detailGR = new GlideRecord('x_1862238_tracenow_connections');
+            detailGR.addQuery('status', 'Active');
+            detailGR.query();
+            
+            if (detailGR.next()) {
+                try {
+                    var detailUser = detailGR.getValue('username');
+                    var detailPass = detailGR.password.getDecryptedValue() || detailGR.getValue('password');
+                    var detailEndpoint = data.activeInstance.url + "/api/now/table/" + targetTable + "/" + targetSysId + "?sysparm_display_value=true";
+                    
+                    var detailRequest = new sn_ws.RESTMessageV2();
+                    detailRequest.setEndpoint(detailEndpoint);
+                    detailRequest.setHttpMethod('GET');
+                    if (detailUser && detailPass) {
+                        detailRequest.setBasicAuth(detailUser, detailPass);
+                    }
+                    
+                    var detailResponse = detailRequest.execute();
+                    if (detailResponse.getStatusCode() === 200) {
+                        var detailBody = JSON.parse(detailResponse.getBody());
+                        if (detailBody.result) {
+                            var rawObj = detailBody.result;
+                            var targetFields = ['number', 'short_description', 'sys_id', 'state', 'priority', 'assignment_group', 'assigned_to', 'sys_updated_by', 'sys_updated_on'];
+                            
+                            for (var f = 0; f < targetFields.length; f++) {
+                                var fName = targetFields[f];
+                                if (rawObj.hasOwnProperty(fName)) {
+                                    var displayVal = (rawObj[fName] && typeof rawObj[fName] === 'object') ? rawObj[fName].display_value : rawObj[fName];
+                                    data.singleRecord.push({
+                                        label: fName.replace(/_/g, ' '),
+                                        value: displayVal ? String(displayVal) : '---'
+                                    });
+                                }
+                            }
+                            
+                            if (data.singleRecord.length === 0) {
+                                var limit = 0;
+                                for (var key in rawObj) {
+                                    if (typeof rawObj[key] !== 'object' && rawObj[key] && !key.startsWith('sys_')) {
+                                        data.singleRecord.push({ label: key.replace(/_/g, ' '), value: String(rawObj[key]) });
+                                        limit++;
+                                    }
+                                    if (limit > 8) break;
+                                }
+                            }
+                        }
+                    }
+                } catch(e) {
+                    gs.error("TraceNow Record Details REST Error: " + e.message);
+                }
+            }
+        } else {
+            var localRecGR = new GlideRecord(targetTable);
+            if (localRecGR.get(targetSysId)) {
+                var localFields = ['number', 'short_description', 'sys_id', 'state', 'priority', 'assignment_group', 'assigned_to', 'sys_updated_by', 'sys_updated_on'];
+                
+                for (var lf = 0; lf < localFields.length; lf++) {
+                    var lfName = localFields[lf];
+                    if (localRecGR.isValidField(lfName)) {
+                        data.singleRecord.push({
+                            label: lfName.replace(/_/g, ' '),
+                            value: localRecGR.getDisplayValue(lfName) || '---'
+                        });
+                    }
+                }
+            }
+        }
+    }
+    return;
+}
+
+// --- 3. BATCH LIST DATA RETRIEVAL HANDLER ---
+if (input.action === 'fetch_records') {
+    data.records = [];
+    data.error = "";
+    data.tableName = input.table;
+    data.tableLabel = input.label;
+    data.totalRecords = 0;
+
+    if (isRemote) {
+        var fetchConn = new GlideRecord('x_1862238_tracenow_connections');
+        fetchConn.addQuery('status', 'Active');
+        fetchConn.query();
+        
+        if (fetchConn.next()) {
+            var username = fetchConn.getValue('username');
+            var password = fetchConn.password.getDecryptedValue() || fetchConn.getValue('password');
+
+            try {
+                var endpoint = data.activeInstance.url + "/api/now/table/" + data.tableName + "?sysparm_limit=100&sysparm_display_value=true";
+                var request = new sn_ws.RESTMessageV2();
+                request.setEndpoint(endpoint);
+                request.setHttpMethod('GET');
+                if (username && password) {
+                    request.setBasicAuth(username, password);
+                }
+
+                var response = request.execute();
+                var statusCode = response.getStatusCode();
+
+                if (statusCode === 200) {
+                    var headers = response.getHeaders();
+                    if (headers['X-Total-Count']) {
+                        data.totalRecords = headers['X-Total-Count'];
+                    }
+
+                    var responseBody = JSON.parse(response.getBody());
+                    if (responseBody.result) {
+                        var results = responseBody.result;
+                        if (!data.totalRecords) data.totalRecords = results.length;
+
+                        for (var i = 0; i < results.length; i++) {
+                            var rec = results[i];
+                            data.records.push({
+                                sys_id: rec.sys_id,
+                                number: rec.number || rec.name || rec.sys_id,
+                                updated_by: rec.sys_updated_by,
+                                updated_on: rec.sys_updated_on,
+                                state: rec.state || rec.install_status || 'Active',
+                                selected: false
+                            });
+                        }
+                    }
+                } else {
+                    data.error = "Target instance status error context: " + statusCode;
+                }
+            } catch (ex) {
+                data.error = "Communication failure context message: " + ex.message;
+            }
+        }
+    } else {
+        try {
+            var ga = new GlideAggregate(data.tableName);
+            ga.addAggregate('COUNT');
+            ga.query();
+            if (ga.next()) {
+                data.totalRecords = ga.getAggregate('COUNT');
+            }
+
+            var localListGR = new GlideRecord(data.tableName);
+            localListGR.orderByDesc('sys_updated_on');
+            localListGR.setLimit(100);
+            localListGR.query();
+
+            while (localListGR.next()) {
+                data.records.push({
+                    sys_id: localListGR.getUniqueValue(),
+                    number: localListGR.isValidField('number') ? localListGR.getValue('number') : (localListGR.isValidField('name') ? localListGR.getValue('name') : localListGR.getUniqueValue()),
+                    updated_by: localListGR.isValidField('sys_updated_by') ? localListGR.getValue('sys_updated_by') : '',
+                    updated_on: localListGR.isValidField('sys_updated_on') ? localListGR.getValue('sys_updated_on') : '',
+                    state: localListGR.isValidField('state') ? localListGR.getDisplayValue('state') : (localListGR.isValidField('install_status') ? localListGR.getDisplayValue('install_status') : 'Active'),
+                    selected: false
+                });
+            }
+        } catch (ex) {
+            data.error = "Failed to load local records: " + ex.message;
+        }
+    }
+    return;
+}
+
+// --- 4. ENGINE RUNTIME MIGRATION EXECUTION ---
+if (input.action === 'run_migration' && input.groups) {
+    if (!isRemote) {
+        data.migrationSuccess = false;
+        data.migrationError = "You cannot migrate records from the local instance.";
+        return;
+    }
+
+    try {
+        var connGR2 = new GlideRecord('x_1862238_tracenow_connections');
+        connGR2.addQuery('status', 'Active');
+        connGR2.query();
+        if (!connGR2.next()) return;
+
+        var connSysId2 = connGR2.getUniqueValue(); 
+        var sourceUrl2 = connGR2.getValue('source_instance_url');
+        var username2  = connGR2.getValue('username');
+        var password2  = connGR2.password.getDecryptedValue() || connGR2.getValue('password');
+        if (sourceUrl2.endsWith('/')) sourceUrl2 = sourceUrl2.slice(0, -1);
+
+        var items = [];
+        var group = input.groups[0];
+        for (var k = 0; k < group.records.length; k++) {
+            items.push({ table: group.tableName, sysId: group.records[k].sys_id, number: group.records[k].number });
+        }
+
+        var dm = new x_1862238_tracenow.dm_test();
+        var summary = dm.migrateMixedRecords(sourceUrl2, username2, password2, items, { sortByTable: true });
+
+        var historyTable = 'x_1862238_tracenow_migration_history';
+        if (gs.tableExists(historyTable)) {
+            for (var m = 0; m < summary.results.length; m++) {
+                var r = summary.results[m];
+                var matchingItem = null;
+                for (var n = 0; n < items.length; n++) {
+                    if (items[n].sysId === r.sourceId || items[n].sysId === r.sys_id) {
+                        matchingItem = items[n];
+                        break;
+                    }
+                }
+                var recNum = (matchingItem && matchingItem.number) ? matchingItem.number : (r.sourceId || 'Unknown');
+                var tblName = r.table || (matchingItem ? matchingItem.table : '');
+                
+                var targetRecordNum = "";
+                if (r.success && r.targetId && tblName) {
+                    try {
+                        var grTarget = new GlideRecord(tblName);
+                        if (grTarget.get(r.targetId) && grTarget.isValidField('number')) {
+                            targetRecordNum = grTarget.getValue('number') || '';
+                        }
+                    } catch (eNumCheck) {}
+                }
+
+                var h = new GlideRecord(historyTable);
+                h.addQuery('record_number', recNum);
+                h.addQuery('table_name', tblName);
+                h.addQuery('connection', connSysId2);
+                h.query();
+
+                if (h.next()) {
+                    h.setValue('status', r.success ? 'Success' : 'Failed');
+                    h.setValue('error_message', r.error || '');
+                    if (targetRecordNum) h.setValue('target_record_number', targetRecordNum); 
+                    h.update();
+                } else {
+                    h.initialize(); 
+                    h.setValue('record_number', recNum);
+                    h.setValue('table_name', tblName);
+                    h.setValue('status', r.success ? 'Success' : 'Failed');
+                    h.setValue('error_message', r.error || '');
+                    h.setValue('connection', connSysId2); 
+                    if (targetRecordNum) h.setValue('target_record_number', targetRecordNum);
+                    h.insert();
+                }
+            }
+        }
+
+        var totalCount = items.length;
+        var failedCount = 0;
+        if (summary && summary.results) {
+            for (var resIdx = 0; resIdx < summary.results.length; resIdx++) {
+                if (!summary.results[resIdx].success) failedCount++;
+            }
+        }
+
+        data.migrationSuccess = (failedCount === 0);
+        data.migrationSummary = {
+            total: totalCount,
+            failed: failedCount,
+            success: (totalCount - failedCount),
+            durationText: (summary && summary.duration) ? summary.duration : "0.4s"
+        };
+    } catch (ex) {
+        data.migrationSuccess = false;
+        data.migrationError = String(ex);
+    }
+}
+
+// --- 5. ASYNC EXPORT HANDLER (Trigger Logic Intact) ---
+if (input && input.action === 'export_async' && input.sysIds) {
+    var job = new GlideRecord('x_1862238_tracenow_export_job');
+    job.initialize();
+    job.table_name = input.tableName;
+    job.status = 'Processing';
+    
+    var recordNumbers = [];
+    var recGr = new GlideRecord(input.tableName);
+    recGr.addQuery('sys_id', 'IN', input.sysIds.join(','));
+    recGr.query();
+    while (recGr.next()) {
+        recordNumbers.push(recGr.getValue('number') || recGr.getUniqueValue());
+    }
+    
+    job.record_number = recordNumbers.join(', ');
+    var jobId = job.insert();
+
+    var bridge = new global.TraceNowGlobalBridge();
+    bridge.startAsyncExport(input.tableName, input.sysIds.join(','), jobId);
+    
+    data.asyncSuccess = true;
+    return;
+}
+
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 16:06:44</sys_created_on>
+        <sys_id>70471b38c3d9831093c8b71d050131c0</sys_id>
+        <sys_mod_count>69</sys_mod_count>
+        <sys_name>TraceNow Record Browser</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_70471b38c3d9831093c8b71d050131c0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-11 08:56:12</sys_updated_on>
+        <template><![CDATA[<div class="tn-records-wrapper">
+  <div ng-if="c.data.error" class="alert alert-warning tn-alert">
+    <i class="fa fa-exclamation-triangle"></i> {{c.data.error}}
+  </div>
+
+  <div ng-if="!c.data.error">
+    <a href="javascript:void(0)" ng-click="c.goBack()" class="tn-back-link">
+      <i class="fa fa-chevron-left"></i> Back to all tables
+    </a>
+
+    <div class="tn-header-section">
+      <h1 class="tn-page-title">{{c.data.tableLabel}}</h1>
+      <div class="tn-badges">
+        <span class="tn-badge tn-badge-gray">{{c.data.tableName}}</span>
+        <span class="tn-badge tn-badge-gray">{{c.data.totalRecords}} total records</span>
+      </div>
+    </div>
+
+    <div class="tn-selection-bar" ng-if="c.getSelectedRecords().length > 0">
+      <div class="tn-selection-info">
+        <div class="tn-selection-count">{{c.getSelectedRecords().length}}</div>
+        <span><strong>{{c.getSelectedRecords().length}} records selected</strong> from {{c.data.tableLabel}}</span>
+      </div>
+      <div class="tn-selection-actions">
+        <button class="tn-btn-text" ng-click="c.clearSelection()" ng-disabled="c.migrating || c.exporting">Remove Selection</button>
+        <button class="tn-btn-queue" ng-click="c.addToQueue()" ng-disabled="c.migrating || c.exporting">
+          <i class="fa fa-shopping-cart"></i> Add to Queue
+        </button>
+        
+        <button ng-if="c.data.isRemote" class="tn-btn-migrate" ng-click="c.migrateNow()" ng-disabled="c.migrating">
+          <i class="fa" ng-class="{'fa-spinner fa-spin': c.migrating, 'fa-bolt': !c.migrating}"></i> 
+          {{ c.migrating ? 'Migrating...' : 'Migrate Now' }}
+        </button>
+        
+        <button ng-if="!c.data.isRemote" class="tn-btn-migrate" style="background-color: #10b981; border-color: #10b981;" ng-click="c.exportXML()" ng-disabled="c.exporting">
+          <i class="fa" ng-class="{'fa-spinner fa-spin': c.exporting, 'fa-download': !c.exporting}"></i> 
+          {{ c.exporting ? 'Exporting...' : 'Export XML' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="tn-search-container">
+      <i class="fa fa-search tn-search-icon"></i>
+      <input type="text" ng-model="c.searchText" ng-change="c.currentPage = 1" class="tn-search-input" placeholder="Search records...">
+    </div>
+
+    <div class="tn-table-container">
+      <table class="tn-data-table">
+        <thead>
+          <tr>
+            <th width="40"><input type="checkbox" ng-model="c.allSelected" ng-change="c.toggleAll()"></th>
+            <th>NUMBER</th>
+            <th>UPDATED BY</th>
+            <th>UPDATED ON</th>
+            <th>STATE</th>
+            <th>PREVIEW</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr ng-repeat="record in filteredRecords = (c.data.records | filter:c.searchText) | limitTo: c.pageSize : (c.currentPage - 1) * c.pageSize">
+            <td><input type="checkbox" ng-model="record.selected"></td>
+            <td class="tn-fw-600">{{record.number}}</td>
+            <td>{{record.updated_by}}</td>
+            <td>{{record.updated_on}}</td>
+            <td><span class="tn-state-text">{{record.state}}</span></td>
+            <td>
+              <a href="javascript:void(0)" ng-click="c.viewRecord(record)" class="tn-icon-btn" title="Preview Record">
+                <i class="fa fa-eye"></i>
+              </a>
+            </td>
+          </tr>
+          <tr ng-if="filteredRecords.length === 0">
+            <td colspan="6" class="tn-no-data">No records found matching current selection.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tn-pagination-bar" ng-if="filteredRecords.length > 0">
+      <div class="tn-pagination-info">
+        Showing {{ (c.currentPage - 1) * c.pageSize + 1 }} to {{ c.min(c.currentPage * c.pageSize, filteredRecords.length) }} of {{ filteredRecords.length }} records
+      </div>
+      <div class="tn-pagination-controls">
+        <button class="tn-page-btn" ng-disabled="c.currentPage === 1" ng-click="c.currentPage = c.currentPage - 1">
+          <i class="fa fa-chevron-left"></i>
+        </button>
+        <span class="tn-page-current">Page {{ c.currentPage }} of {{ c.numberOfPages(filteredRecords.length) }}</span>
+        <button class="tn-page-btn" ng-disabled="c.currentPage >= c.numberOfPages(filteredRecords.length)" ng-click="c.currentPage = c.currentPage + 1">
+          <i class="fa fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop fade in" ng-if="c.showPreviewModal" style="z-index: 1040;"></div>
+<div class="modal data-preview-modal" ng-class="{'show-block': c.showPreviewModal}" ng-if="c.showPreviewModal" role="dialog" style="z-index: 1050; display: block; overflow-y: auto;">
+  <div class="modal-dialog modal-lg" style="margin: 8% auto;">
+    <div class="modal-content panel panel-default" style="border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,0.25); border: none;">
+      
+      <div class="panel-heading modal-header-prime" style="background: #ffffff; border-bottom: 1px solid #e9e9e9; padding: 20px 24px; border-top-left-radius: 6px; border-top-right-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="panel-title" style="font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; display: flex; align-items: center;">
+          <i class="fa fa-file-text-o text-primary" style="margin-right: 10px;"></i> 
+          Remote Record View &mdash; <span class="text-primary" style="margin-left: 5px;">{{c.previewNumber}}</span>
+        </h3>
+        <button type="button" class="close" ng-click="c.closeModal()" style="font-size: 24px; margin: 0; padding: 0; line-height: 1; opacity: 0.4; transition: opacity 0.2s;">&times;</button>
+      </div>
+      
+      <div class="panel-body" style="padding: 24px; background: #fafbfc; min-height: 200px;">
+        
+        <div ng-if="c.loadingPreview" class="text-center" style="padding: 60px 0;">
+          <i class="fa fa-circle-o-notch fa-spin fa-3x fa-fw text-primary" style="font-size: 40px; margin-bottom: 12px;"></i>
+          <p style="font-size: 14px; font-weight: 600; color: #4b5563; margin: 0;">Fetching live backend properties secure data pipeline...</p>
+        </div>
+
+        <div ng-if="!c.loadingPreview && c.previewFields.length > 0" class="row">
+          <div class="col-xs-12 col-sm-6" ng-repeat="field in c.previewFields" style="margin-bottom: 18px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 12px; font-weight: 700; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block;">
+                {{field.label}}
+              </label>
+              <div class="input-group-fake" style="position: relative;">
+                <input type="text" class="form-control text-read" ng-value="field.value || '---'" readonly 
+                       style="background: #ffffff; color: #111827; border: 1px solid #d1d5db; border-radius: 6px; height: 40px; padding: 10px 14px; font-size: 14px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); width: 100%; font-weight: 500;" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div ng-if="!c.loadingPreview && (!c.previewFields || c.previewFields.length === 0)" class="text-center" style="padding: 40px 10px;">
+          <i class="fa fa-exclamation-triangle text-warning" style="font-size: 32px; margin-bottom: 10px;"></i>
+          <p style="font-size: 14px; font-weight: 500; color: #6b7280; margin: 0;">No matching viewable record properties returned from remote endpoint.</p>
+        </div>
+
+      </div>
+      
+      <div class="panel-footer" style="background: #ffffff; border-top: 1px solid #e9e9e9; padding: 16px]]></template>
+    </sp_widget>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>70471b38c3d9831093c8b71d050131c0</id>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 16:06:44</sys_created_on>
+        <sys_id>f0471b38c3d9831093c8b71d050131c4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 16:06:44</sys_updated_on>
+        <table>sp_widget</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
+</record_update>

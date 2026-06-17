@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller =api.controller = function($window) {
+    var c = this;
+    
+    // Menu States
+    c.showProfileMenu = false;
+
+    // Helper to close menus
+    c.closeAllMenus = function() {
+        c.showProfileMenu = false;
+    };
+
+    // Toggle Functions
+    c.toggleProfileMenu = function() {
+        var currentState = c.showProfileMenu;
+        c.closeAllMenus();
+        c.showProfileMenu = !currentState;
+    };
+
+    // Logout Function
+    c.logout = function() {
+        $window.location.href = '/logout.do';
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-header-widget {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 65px;
+  background: #ffffff;
+  padding: 0 30px;
+  border-bottom: 1px solid #eef2f6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  width: 100%;
+  box-sizing: border-box;
+
+  .brand-side {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #0f172a;
+
+    .brand-logo {
+      background: #0c63e7;
+      color: #ffffff;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .text-blue { color: #0c63e7; }
+  }
+
+  .actions-side {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+
+    .action-item-container {
+      position: relative;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+
+      &amp;:hover { opacity: 0.8; }
+
+      .profile-name {
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #334155;
+      }
+
+      .avatar {
+        background: #0c63e7;
+        color: #ffffff;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: bold;
+      }
+      .profile-chevron {
+        font-size: 12px;
+        color: #94a3b8;
+      }
+    }
+
+    /* Shared Dropdown Styles */
+    .action-dropdown {
+      position: absolute;
+      top: 45px;
+      right: -10px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      min-width: 220px;
+      z-index: 1000;
+      overflow: hidden;
+    }
+
+    /* Specific adjustment for profile dropdown */
+    .profile-dropdown {
+      top: 55px;
+      right: 0;
+      min-width: 160px;
+      
+      .dropdown-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+          padding: 12px 16px;
+          font-size: 14px;
+          color: #ef4444;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+
+          &amp;:hover { background-color: #f8fafc; }
+        }
+      }
+    }
+  }
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tracenow-header</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Header Widget.</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    // 1. Get the current logged-in user object
+    var currentUser = gs.getUser();
+
+    // 2. Fetch their full Display Name
+    data.userName = currentUser.getDisplayName();
+    data.userInitials = "U"; // Default fallback
+
+    // 3. Calculate the initials dynamically
+    if (data.userName) {
+        var nameParts = data.userName.split(' ');
+        if (nameParts.length > 1) {
+            // First letter of first name + First letter of last name
+            data.userInitials = nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0);
+        } else {
+            // If they only have one name, take the first two letters
+            data.userInitials = nameParts[0].substring(0, 2);
+        }
+        // Ensure initials are always uppercase
+        data.userInitials = data.userInitials.toUpperCase();
+    }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:16:34</sys_created_on>
+        <sys_id>96c87ae0c359031093c8b71d0501312d</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>TraceNow Header Widget.</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_96c87ae0c359031093c8b71d0501312d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 18:10:32</sys_updated_on>
+        <template><![CDATA[<header class="tn-header-widget">
+  
+  <div class="brand-side">
+    <div class="brand-logo"><i class="fa fa-th-large"></i></div>
+    <span class="brand-title">Trace<span class="text-blue">Now</span></span>
+  </div>
+
+  <div class="actions-side">
+    
+    <div class="action-item-container user-profile-container">
+      <div class="user-profile" ng-click="c.toggleProfileMenu()">
+        <span class="profile-name">{{::c.data.userName}}</span>
+        <div class="avatar">{{::c.data.userInitials}}</div>
+        <i class="fa fa-chevron-down profile-chevron"></i>
+      </div>
+      
+      <div class="action-dropdown profile-dropdown" ng-if="c.showProfileMenu">
+        <ul class="dropdown-list">
+          <li ng-click="c.logout()">
+            <i class="fa fa-sign-out"></i> Logout
+          </li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</header>]]></template>
+    </sp_widget>
+</record_update>

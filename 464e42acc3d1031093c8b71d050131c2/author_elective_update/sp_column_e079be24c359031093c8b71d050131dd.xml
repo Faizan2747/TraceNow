@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_column">
+    <sp_column action="DELETE">
+        <aria_label/>
+        <class_name/>
+        <order>1</order>
+        <semantic_tag/>
+        <size>12</size>
+        <size_lg/>
+        <size_sm/>
+        <size_xs/>
+        <sp_row display_value="1">68793e24c359031093c8b71d05013190</sp_row>
+        <sys_class_name>sp_column</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:17:59</sys_created_on>
+        <sys_id>e079be24c359031093c8b71d050131dd</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>1</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_column_e079be24c359031093c8b71d050131dd</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:17:59</sys_updated_on>
+    </sp_column>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sp_column_e079be24c359031093c8b71d050131dd</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_column"><sp_column action="INSERT_OR_UPDATE"><aria_label/><class_name/><order>1</order><semantic_tag/><size>12</size><size_lg/><size_sm/><size_xs/><sp_row display_value="1">68793e24c359031093c8b71d05013190</sp_row><sys_class_name>sp_column</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-06-02 19:17:59</sys_created_on><sys_id>e079be24c359031093c8b71d050131dd</sys_id><sys_mod_count>0</sys_mod_count><sys_name>1</sys_name><sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package><sys_policy/><sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope><sys_update_name>sp_column_e079be24c359031093c8b71d050131dd</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-06-02 19:17:59</sys_updated_on></sp_column></record_update>]]></payload>
+        <payload_hash>-1658744243</payload_hash>
+        <record_name>1</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:17:59</sys_created_on>
+        <sys_id>b479be24c359031093c8b71d050131e0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e89c573160000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:17:59</sys_updated_on>
+        <type>Column</type>
+        <update_guid>7479be24735903103eec3d96ecd0e8df</update_guid>
+        <update_guid_history>7479be24735903103eec3d96ecd0e8df:-1658744243</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="1">3e8cbea8c359031093c8b71d050131e0</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:31:31</sys_created_on>
+        <sys_db_object display_value="" name="sp_column">sp_column</sys_db_object>
+        <sys_id>8364e3f87ca34d7c9b36f13aad5f3610</sys_id>
+        <sys_metadata>e079be24c359031093c8b71d050131dd</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>1</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sp_column_e079be24c359031093c8b71d050131dd</sys_update_name>
+        <sys_update_version display_value="sp_column_e079be24c359031093c8b71d050131dd">b479be24c359031093c8b71d050131e0</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:31:31</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

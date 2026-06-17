@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="02225ae4c315031093c8b71d050131da" label="Migration History" max_length="40" name="x_1862238_tracenow_migration_history" type="collection">
+        <element label="Source Table" max_length="40" name="source_table" type="string"/>
+        <element label="Source Record Number" max_length="100" name="record_number" type="string"/>
+        <element label="Migrated By" max_length="32" name="migrated_by" reference="imp_user" type="reference"/>
+        <element label="Connection" max_length="32" name="connection" reference="x_1862238_tracenow_connections" type="reference"/>
+        <element label="Migration Start Time" max_length="40" name="migration_start_time" type="glide_date_time"/>
+        <element label="Table Name" max_length="40" name="table_name" type="string"/>
+        <element active="false" label="Error Message" max_length="4000" name="error_messag" type="string"/>
+        <element label="Error Message" max_length="4000" name="error_message" type="string"/>
+        <element label="Source Sys ID" max_length="40" name="source_sys_id" type="string"/>
+        <element choice="3" label="Status" max_length="40" name="status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Failed" sequence="1" value="failed"/>
+                <element inactive_on_update="false" label="Success" sequence="0" value="success"/>
+            </choice>
+        </element>
+        <element label="Batch ID" max_length="40" name="batch_id" type="string"/>
+        <element label="Target Record Number" max_length="40" name="target_record_number" type="string"/>
+        <element label="Target Sys ID" max_length="40" name="target_sys_id" type="string"/>
+        <element label="Migration End Time" max_length="40" name="migration_end_time" type="glide_date_time"/>
+        <index name="index">
+            <element name="connection"/>
+        </index>
+        <index name="index2">
+            <element name="migrated_by"/>
+        </index>
+    </element>
+</database>

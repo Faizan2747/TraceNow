@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="8c9f82a0c315031093c8b71d0501312a" label="Connections" max_length="40" name="x_1862238_tracenow_connections" type="collection">
+        <element label="Connection Name" max_length="40" name="connection_name" type="string"/>
+        <element label="Source Instance URL" max_length="1024" name="source_instance_url" type="url"/>
+        <element label="Password" max_length="255" name="password" type="password2"/>
+        <element choice="3" default="Inactive" label="Status" max_length="40" name="status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Testing" sequence="2" value="testing"/>
+                <element inactive_on_update="false" label="Active" sequence="0" value="active"/>
+                <element inactive_on_update="false" label="Inactive" sequence="1" value="inactive"/>
+            </choice>
+        </element>
+        <element label="Username" max_length="100" name="username" type="string"/>
+        <element display="true" label="Instance Name" max_length="100" name="instance_name" type="string"/>
+    </element>
+</database>

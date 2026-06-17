@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ws_operation">
+    <sys_ws_operation action="DELETE">
+        <active>true</active>
+        <consumes>application/json,application/xml,text/xml</consumes>
+        <consumes_customized>false</consumes_customized>
+        <default_operation_uri/>
+        <enforce_acl/>
+        <http_method>POST</http_method>
+        <name>Start Queue Migration</name>
+        <operation_script><![CDATA[(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+
+    // implement resource here
+
+})(request, response);]]></operation_script>
+        <operation_uri>/api/x_1862238_tracenow/tracenow_api/start_queue_migration</operation_uri>
+        <produces>application/json,application/xml,text/xml</produces>
+        <produces_customized>false</produces_customized>
+        <relative_path>/start_queue_migration</relative_path>
+        <request_example/>
+        <requires_acl_authorization>true</requires_acl_authorization>
+        <requires_authentication>true</requires_authentication>
+        <requires_snc_internal_role>true</requires_snc_internal_role>
+        <short_description/>
+        <support_trailing_slash>false</support_trailing_slash>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 17:49:10</sys_created_on>
+        <sys_id>99056e2cc395031093c8b71d05013182</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Start Queue Migration</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sys_ws_operation_99056e2cc395031093c8b71d05013182</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 17:49:10</sys_updated_on>
+        <web_service_definition display_value="TraceNow API">1dc0a624c395031093c8b71d050131ac</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sys_ws_operation_99056e2cc395031093c8b71d05013182</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_ws_operation"&gt;&lt;sys_ws_operation action="INSERT_OR_UPDATE"&gt;&lt;active&gt;true&lt;/active&gt;&lt;consumes&gt;application/json,application/xml,text/xml&lt;/consumes&gt;&lt;consumes_customized&gt;false&lt;/consumes_customized&gt;&lt;default_operation_uri/&gt;&lt;enforce_acl/&gt;&lt;http_method&gt;POST&lt;/http_method&gt;&lt;name&gt;Start Queue Migration&lt;/name&gt;&lt;operation_script&gt;&lt;![CDATA[(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+
+    // implement resource here
+
+})(request, response);]]&gt;&lt;/operation_script&gt;&lt;operation_uri&gt;/api/x_1862238_tracenow/tracenow_api/start_queue_migration&lt;/operation_uri&gt;&lt;produces&gt;application/json,application/xml,text/xml&lt;/produces&gt;&lt;produces_customized&gt;false&lt;/produces_customized&gt;&lt;relative_path&gt;/start_queue_migration&lt;/relative_path&gt;&lt;request_example/&gt;&lt;requires_acl_authorization&gt;true&lt;/requires_acl_authorization&gt;&lt;requires_authentication&gt;true&lt;/requires_authentication&gt;&lt;requires_snc_internal_role&gt;true&lt;/requires_snc_internal_role&gt;&lt;short_description/&gt;&lt;support_trailing_slash&gt;false&lt;/support_trailing_slash&gt;&lt;sys_class_name&gt;sys_ws_operation&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-06-02 17:49:10&lt;/sys_created_on&gt;&lt;sys_id&gt;99056e2cc395031093c8b71d05013182&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;Start Queue Migration&lt;/sys_name&gt;&lt;sys_package display_value="TraceNow" source="x_1862238_tracenow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="TraceNow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_ws_operation_99056e2cc395031093c8b71d05013182&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-06-02 17:49:10&lt;/sys_updated_on&gt;&lt;web_service_definition display_value="TraceNow API"&gt;1dc0a624c395031093c8b71d050131ac&lt;/web_service_definition&gt;&lt;web_service_version/&gt;&lt;/sys_ws_operation&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-2065641496</payload_hash>
+        <record_name>Start Queue Migration</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 17:49:10</sys_created_on>
+        <sys_id>b715a26cc395031093c8b71d0501312b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e897423ae0000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 17:49:10</sys_updated_on>
+        <type>Scripted REST Resource</type>
+        <update_guid>7715a26c3295031084ca24c9533d972a</update_guid>
+        <update_guid_history>7715a26c3295031084ca24c9533d972a:-2065641496</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-17 19:02:17</sys_created_on>
+        <sys_db_object display_value="" name="sys_ws_operation">sys_ws_operation</sys_db_object>
+        <sys_id>4e258a2d7810433fa56da393e784f141</sys_id>
+        <sys_metadata>99056e2cc395031093c8b71d05013182</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Start Queue Migration</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sys_ws_operation_99056e2cc395031093c8b71d05013182</sys_update_name>
+        <sys_update_version display_value="sys_ws_operation_99056e2cc395031093c8b71d05013182">b715a26cc395031093c8b71d0501312b</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-17 19:02:17</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

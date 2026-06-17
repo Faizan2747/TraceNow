@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $rootScope) {
+    var c = this;
+    
+    c.searchText = '';
+
+    // =========================================================
+    // Listen for connection changes from the Connections widget
+    // =========================================================
+    $rootScope.$on('tracenow_connection_updated', function() {
+        c.searchText = ''; // Clear search
+
+        // Trigger a full server update to grab the new default tables AND the new total count
+        c.server.update().then(function(response) {
+            c.data.tables = response.data.tables;
+            c.data.activeInstance = response.data.activeInstance;
+            c.data.totalInstanceTables = response.data.totalInstanceTables; 
+            c.data.error = response.data.error;
+        });
+    });
+
+    // =========================================================
+    // Watch the search text for changes (Debounced by the HTML)
+    // =========================================================
+    $scope.$watch('c.searchText', function(newValue, oldValue) {
+        if (newValue === oldValue) return; // Ignore on initial load
+
+        // Send the search text AND the known total count to the Server Script
+        c.server.get({
+            action: 'search_tables',
+            searchTerm: newValue,
+            totalInstanceTables: c.data.totalInstanceTables // Performance saving
+        }).then(function(response) {
+            c.data.tables = response.data.tables;
+            c.data.activeInstance = response.data.activeInstance;
+            c.data.totalInstanceTables = response.data.totalInstanceTables; 
+            c.data.error = response.data.error;
+        });
+    });
+
+    // =========================================================
+    // Action when a user clicks "Browse Records"
+    // =========================================================
+    c.browseRecords = function(table) {
+        $rootScope.$broadcast('tracenow.table_selected', {
+            tableName: table.name,
+            tableLabel: table.label
+        });
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-browse-wrapper {
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.tn-alert {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.tn-browse-header {
+  margin-bottom: 24px;
+}
+
+.tn-main-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.tn-subtitle {
+  font-size: 18px;
+  color: #64748b;
+  margin: 0;
+}
+
+.tn-instance-name {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* Search Bar */
+.tn-search-container {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.tn-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 16px;
+}
+
+.tn-search-input {
+  width: 100%;
+  padding: 14px 16px 14px 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background-color: #f8fafc;
+}
+
+.tn-search-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background-color: #ffffff;
+}
+
+.tn-table-count {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 24px;
+}
+
+/* Grid Layout */
+.tn-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+/* Card Styling */
+.tn-table-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid #f1f5f9;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tn-table-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.tn-card-content {
+  margin-bottom: 24px;
+}
+
+.tn-record-count {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin: 0 0 8px 0;
+}
+
+.tn-table-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+.tn-table-name {
+  font-size: 13px;
+  color: #3b82f6;
+  margin: 0;
+}
+
+/* Button */
+.tn-btn-browse {
+  width: 100%;
+  background-color: #1d4ed8;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.tn-btn-browse:hover {
+  background-color: #1e40af;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow_browse_tables</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>TraceNow Browse Tables</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    data.tables = [];
+    data.error = "";
+    data.activeInstance = null;
+    
+    // Carry over the total count if the client already knows it, otherwise default to 0
+    data.totalInstanceTables = (input && input.totalInstanceTables) ? parseInt(input.totalInstanceTables, 10) : 0;
+
+    var isRemote = false;
+    var targetUrl = "";
+    var username = "";
+    var password = "";
+
+    // 1. Determine the Active Connection
+    var connGR = new GlideRecord('x_1862238_tracenow_connections');
+    connGR.addQuery('status', 'Active');
+    connGR.query();
+
+    if (connGR.next()) {
+        isRemote = true;
+        targetUrl = connGR.getValue('source_instance_url');
+        if (targetUrl.endsWith('/')) {
+            targetUrl = targetUrl.substring(0, targetUrl.length - 1);
+        }
+        username = connGR.getValue('username');
+        try { password = connGR.password.getDecryptedValue(); } catch(e) {}
+        if (!password) password = connGR.getValue('password');
+
+        data.activeInstance = {
+            name: connGR.getValue('instance_name') || 'Remote Instance',
+            url: targetUrl
+        };
+    } else {
+        // IMPLICIT LOCAL FALLBACK
+        isRemote = false;
+        data.activeInstance = {
+            name: 'Local Instance',
+            url: gs.getProperty('glide.servlet.uri', '')
+        };
+    }
+
+    // 2. FETCH TOTAL INSTANCE TABLES COUNT (Only if we don't already have it)
+    if (data.totalInstanceTables === 0) {
+        if (isRemote) {
+            try {
+                var totalTblUrl = targetUrl + "/api/now/stats/sys_db_object?sysparm_count=true";
+                var totalTblReq = new sn_ws.RESTMessageV2();
+                totalTblReq.setEndpoint(totalTblUrl);
+                totalTblReq.setHttpMethod('GET');
+                if (username && password) totalTblReq.setBasicAuth(username, password);
+                
+                var totalTblRes = totalTblReq.execute();
+                if (totalTblRes.getStatusCode() === 200) {
+                    var totalTblBody = JSON.parse(totalTblRes.getBody());
+                    if (totalTblBody.result && totalTblBody.result.stats) {
+                        data.totalInstanceTables = parseInt(totalTblBody.result.stats.count, 10);
+                    }
+                }
+            } catch(e) { }
+        } else {
+            try {
+                var totalTblGA = new GlideAggregate('sys_db_object');
+                totalTblGA.addAggregate('COUNT');
+                totalTblGA.query();
+                if (totalTblGA.next()) {
+                    data.totalInstanceTables = parseInt(totalTblGA.getAggregate('COUNT'), 10);
+                }
+            } catch(e) { }
+        }
+    }
+
+    var tablesToFetch = [];
+
+    // 3. CHECK IF USER IS SEARCHING
+  // 3. CHECK IF USER IS SEARCHING
+    if (input && input.action === 'search_tables' && input.searchTerm) {
+        if (isRemote) {
+            // REMOTE SEARCH (REST)
+            try {
+                var searchUrl = targetUrl + "/api/now/table/sys_db_object";
+                searchUrl += "?sysparm_limit=50"; // Limit search to 50 results
+                searchUrl += "&sysparm_fields=name,label";
+                
+                // CRITICAL FIX: The entire query string must be URL encoded because of the '^' character
+                var queryStr = "nameLIKE" + input.searchTerm + "^ORlabelLIKE" + input.searchTerm;
+                searchUrl += "&sysparm_query=" + encodeURIComponent(queryStr);
+
+                var tableReq = new sn_ws.RESTMessageV2();
+                tableReq.setEndpoint(searchUrl);
+                tableReq.setHttpMethod('GET');
+                if (username && password) tableReq.setBasicAuth(username, password);
+                
+                var tableRes = tableReq.execute();
+                if (tableRes.getStatusCode() === 200) {
+                    var body = JSON.parse(tableRes.getBody());
+                    if (body.result) {
+                        for (var j = 0; j < body.result.length; j++) {
+                            tablesToFetch.push({
+                                name: body.result[j].name,
+                                label: body.result[j].label || body.result[j].name
+                            });
+                        }
+                    }
+                } else {
+                    // Log the error so it doesn't fail silently
+                    data.error = "Remote search failed: HTTP " + tableRes.getStatusCode();
+                }
+            } catch (e) {
+                data.error = "Remote search error: " + e.message;
+            }
+        } else {
+            // LOCAL SEARCH (GlideRecord)
+            var sysDbGR = new GlideRecord('sys_db_object');
+            var safeSearchTerm = String(input.searchTerm).replace(/'/g, "\\'"); // Sanitize input
+            var encodedStr = "nameLIKE" + safeSearchTerm + "^ORlabelLIKE" + safeSearchTerm;
+            
+            sysDbGR.addEncodedQuery(encodedStr);
+            sysDbGR.setLimit(50); 
+            sysDbGR.query();
+            
+            while (sysDbGR.next()) {
+                tablesToFetch.push({
+                    name: sysDbGR.getValue('name'),
+                    label: sysDbGR.getValue('label') || sysDbGR.getValue('name')
+                });
+            }
+        }
+    } else {
+        // USER IS NOT SEARCHING: Load Default Tables
+        tablesToFetch = [
+            { name: 'incident', label: 'Incidents' },
+            { name: 'change_request', label: 'Change Requests' },
+            { name: 'problem', label: 'Problems' },
+            { name: 'sc_req_item', label: 'Requested Items' },
+            { name: 'sc_task', label: 'Catalog Tasks' },
+            { name: 'task', label: 'Tasks' },
+            { name: 'cmdb_ci', label: 'Configuration Items' },
+            { name: 'alm_asset', label: 'Assets' },
+            { name: 'sys_user', label: 'Users' },
+            { name: 'cmn_location', label: 'Locations' }
+        ];
+    }
+
+    // 4. FETCH COUNTS FOR THE TABLES IN VIEW
+    for (var i = 0; i < tablesToFetch.length; i++) {
+        var t = tablesToFetch[i];
+        var recordCount = 0;
+        
+        if (isRemote) {
+            // REMOTE RECORD COUNT
+            try {
+                var endpoint = targetUrl + "/api/now/stats/" + t.name + "?sysparm_count=true";
+                var request = new sn_ws.RESTMessageV2();
+                request.setEndpoint(endpoint);
+                request.setHttpMethod('GET');
+                if (username && password) {
+                    request.setBasicAuth(username, password);
+                }
+                request.setHttpTimeout(3000);
+
+                var response = request.execute();
+                if (response.getStatusCode() === 200) {
+                    var responseBody = JSON.parse(response.getBody());
+                    if (responseBody.result && responseBody.result.stats) {
+                        recordCount = parseInt(responseBody.result.stats.count, 10);
+                    }
+                } else {
+                    recordCount = "N/A"; 
+                }
+            } catch (ex) {
+                recordCount = "Err";
+            }
+        } else {
+            // LOCAL RECORD COUNT
+            try {
+                var ga = new GlideAggregate(t.name);
+                ga.addAggregate('COUNT');
+                ga.query();
+                if (ga.next()) {
+                    recordCount = parseInt(ga.getAggregate('COUNT'), 10);
+                }
+            } catch (e) {
+                recordCount = "Err";
+            }
+        }
+
+        data.tables.push({
+            label: t.label,
+            name: t.name,
+            count: recordCount
+        });
+    }
+
+    // ==========================================
+    // CRITICAL FIX: Swallow Cross Scope RCA Spam
+    // ==========================================
+    
+
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 15:59:16</sys_created_on>
+        <sys_id>ab85df34c3d9831093c8b71d050131cd</sys_id>
+        <sys_mod_count>18</sys_mod_count>
+        <sys_name>TraceNow Browse Tables</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_ab85df34c3d9831093c8b71d050131cd</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-09 18:05:40</sys_updated_on>
+        <template><![CDATA[<div class="tn-browse-wrapper">
+  
+  <div ng-if="c.data.error" class="alert alert-warning tn-alert">
+    <i class="fa fa-exclamation-triangle"></i> {{c.data.error}}
+  </div>
+
+  <div ng-if="!c.data.error && c.data.activeInstance">
+    
+    <div class="tn-browse-header">
+      <h1 class="tn-main-title">Browse Records</h1>
+      <p class="tn-subtitle">
+        Select tables from <span class="tn-instance-name">{{c.data.activeInstance.name}}</span>
+      </p>
+    </div>
+
+    <div class="tn-search-container">
+      <i class="fa fa-search tn-search-icon"></i>
+      <input type="text" 
+             ng-model="c.searchText" 
+             ng-model-options="{ debounce: 800 }"
+             class="tn-search-input" 
+             placeholder="Search any table in the instance...">
+    </div>
+
+    <div class="tn-table-count" style="margin-bottom: 20px; color: #64748b; font-size: 14px;">
+  <p>
+    Showing <strong>{{c.data.tables.length}}</strong> tables out of <strong>{{c.data.totalInstanceTables | number}}</strong> total tables
+  </p>
+</div>
+    <div class="tn-grid-container">
+      <div class="tn-table-card" ng-repeat="table in c.data.tables">
+        <div class="tn-card-content">
+          <h2 class="tn-record-count">{{table.count | number}}</h2>
+          <h3 class="tn-table-label">{{table.label}}</h3>
+          <p class="tn-table-name">{{table.name}}</p>
+        </div>
+        <button type="button" class="tn-btn-browse" ng-click="c.browseRecords(table)">
+          Browse Records
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>]]></template>
+    </sp_widget>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>ab85df34c3d9831093c8b71d050131cd</id>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 15:59:16</sys_created_on>
+        <sys_id>ab85df34c3d9831093c8b71d050131d1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 15:59:16</sys_updated_on>
+        <table>sp_widget</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
+</record_update>

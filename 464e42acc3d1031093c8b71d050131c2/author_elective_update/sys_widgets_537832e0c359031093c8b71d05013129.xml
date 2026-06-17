@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_widgets">
+    <sys_widgets action="DELETE">
+        <active>true</active>
+        <name>TraceNow Header Widget</name>
+        <order>100</order>
+        <renderer/>
+        <renderer_type>javascript</renderer_type>
+        <roles/>
+        <script/>
+        <sys_class_name>sys_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:14:38</sys_created_on>
+        <sys_id>537832e0c359031093c8b71d05013129</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Header Widget</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sys_widgets_537832e0c359031093c8b71d05013129</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:14:38</sys_updated_on>
+        <top_level_category>false</top_level_category>
+    </sys_widgets>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sys_widgets_537832e0c359031093c8b71d05013129</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_widgets"><sys_widgets action="INSERT_OR_UPDATE"><active>true</active><name>TraceNow Header Widget</name><order>100</order><renderer/><renderer_type>javascript</renderer_type><roles/><script/><sys_class_name>sys_widgets</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-06-02 19:14:38</sys_created_on><sys_id>537832e0c359031093c8b71d05013129</sys_id><sys_mod_count>0</sys_mod_count><sys_name>TraceNow Header Widget</sys_name><sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package><sys_policy/><sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope><sys_update_name>sys_widgets_537832e0c359031093c8b71d05013129</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-06-02 19:14:38</sys_updated_on><top_level_category>false</top_level_category></sys_widgets></record_update>]]></payload>
+        <payload_hash>-1865769560</payload_hash>
+        <record_name>TraceNow Header Widget</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:14:38</sys_created_on>
+        <sys_id>bfa832e0c359031093c8b71d050131cf</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e89c2630e0000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:14:38</sys_updated_on>
+        <type>Widget</type>
+        <update_guid>6fa832e07a59031072533cca5eeeaece</update_guid>
+        <update_guid_history>6fa832e07a59031072533cca5eeeaece:-1865769560</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:14:50</sys_created_on>
+        <sys_db_object display_value="" name="sys_widgets">sys_widgets</sys_db_object>
+        <sys_id>4c00aec6b4884468977a0a9bc39c8840</sys_id>
+        <sys_metadata>537832e0c359031093c8b71d05013129</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Header Widget</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sys_widgets_537832e0c359031093c8b71d05013129</sys_update_name>
+        <sys_update_version display_value="sys_widgets_537832e0c359031093c8b71d05013129">bfa832e0c359031093c8b71d050131cf</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:14:50</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

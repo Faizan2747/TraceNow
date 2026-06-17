@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="DELETE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function($scope) {
+  var c = this;
+  c.data.records = [];
+  c.data.migrating = false;
+  c.data.progress = 0;
+  
+  $scope.$on('table_selected', function(event, payload) {
+    c.data.selectedTable = payload.table;
+    c.data.connection    = payload.connection;
+    c.server.get({ action: 'get_records', table: payload.table, connection: payload.connection })
+      .then(function(r) { c.data.records = r.data.records; });
+  });
+  
+  c.selectAll = function($event) {
+    var checked = $event.target.checked;
+    c.data.records.forEach(function(r) { r.selected = checked; });
+  };
+  
+  c.getSelected = function() {
+    return c.data.records.filter(function(r) { return r.selected; });
+  };
+  
+  c.migrateNow = function() {
+    var selected = c.getSelected();
+    if (!selected.length) { alert('Please select at least one record.'); return; }
+    c.data.migrating = true;
+    c.data.progress  = 0;
+    c.data.status    = 'Starting migration...';
+    var sysIds = selected.map(function(r) { return r.sys_id; });
+    c.server.get({
+      action:     'migrate_now',
+      table:      c.data.selectedTable,
+      sysIds:     sysIds,
+      connection: c.data.connection
+    }).then(function(r) {
+      c.data.progress  = 100;
+      c.data.status    = 'Migration complete. Success: ' + r.data.success + ', Failed: ' + r.data.failed;
+      c.data.migrating = false;
+    });
+  };
+  
+  c.addToQueue = function() {
+    var selected = c.getSelected();
+    if (!selected.length) { alert('Please select records first.'); return; }
+    var sysIds = selected.map(function(r) { return r.sys_id; });
+    c.server.get({ action: 'add_to_queue', table: c.data.selectedTable, sysIds: sysIds })
+      .then(function(r) { alert(r.data.added + ' record(s) added to queue.'); });
+  };
+  
+  c.removeSelection = function() {
+    c.data.records.forEach(function(r) { r.selected = false; });
+  };
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tracenow-records</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Records</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+  var dm = new dm_test();
+  var conn = input && input.connection;
+  if (conn) {
+    dm.SOURCE_URL  = conn.sourceUrl;
+    dm.SOURCE_USER = conn.username;
+    dm.SOURCE_PSWD = conn.password;
+  }
+  
+  if (input.action === 'get_records') {
+    var api = new sn_ws.RESTMessageV2();
+    api.setEndpoint(conn.sourceUrl + '/api/now/table/' + input.table +
+      '?sysparm_limit=100&sysparm_display_value=false&sysparm_fields=sys_id,number,short_description,state');
+    api.setHttpMethod('GET');
+    api.setBasicAuth(conn.username, conn.password);
+    var resp = api.execute();
+    data.records = resp.getStatusCode() == 200 ? JSON.parse(resp.getBody()).result : [];
+  }
+  
+  if (input.action === 'migrate_now') {
+    var results = dm.migrateRecords(conn.sourceUrl, conn.username, conn.password, input.table, input.sysIds);
+    data.success = results.success;
+    data.failed  = results.failed;
+  }
+  
+  if (input.action === 'add_to_queue') {
+    var added = dm.queueMigration(input.table, input.sysIds);
+    data.added = added;
+  }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 18:06:03</sys_created_on>
+        <sys_id>ce98eee0c3d5031093c8b71d050131e6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Records</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_ce98eee0c3d5031093c8b71d050131e6</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 18:06:03</sys_updated_on>
+        <template><![CDATA[<div class="tracenow-records">
+  <h3>Records — {{c.data.selectedTable}}</h3>
+  <div ng-if="!c.data.records.length">
+    <p class="text-muted">No records loaded. Select a table first.</p>
+  </div>
+  <table class="table table-bordered table-hover" ng-if="c.data.records.length">
+    <thead>
+      <tr>
+        <th><input type="checkbox" ng-click="c.selectAll($event)"/></th>
+        <th>Number</th>
+        <th>Short Description</th>
+        <th>State</th>
+        <th>Sys ID</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr ng-repeat="rec in c.data.records">
+        <td><input type="checkbox" ng-model="rec.selected"/></td>
+        <td>{{rec.number}}</td>
+        <td>{{rec.short_description}}</td>
+        <td>{{rec.state}}</td>
+        <td>{{rec.sys_id}}</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <!-- Action Buttons -->
+  <div class="btn-group" ng-if="c.data.records.length">
+    <button class="btn btn-success" ng-click="c.migrateNow()">Migrate Now</button>
+    <button class="btn btn-info"    ng-click="c.addToQueue()">Add to Queue</button>
+    <button class="btn btn-default" ng-click="c.removeSelection()">Remove Selection</button>
+  </div>
+  
+  <!-- Live Progress Bar (shown during migration) -->
+  <div ng-if="c.data.migrating" style="margin-top:15px;">
+    <p><strong>Live Migration Activity</strong></p>
+    <div class="progress">
+      <div class="progress-bar" style="width: {{c.data.progress}}%">{{c.data.progress}}%</div>
+    </div>
+    <p>{{c.data.status}}</p>
+  </div>
+</div>]]></template>
+    </sp_widget>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sp_widget_ce98eee0c3d5031093c8b71d050131e6</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sp_widget"&gt;&lt;sp_widget action="INSERT_OR_UPDATE"&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[api.controller=function($scope) {
+  var c = this;
+  c.data.records = [];
+  c.data.migrating = false;
+  c.data.progress = 0;
+  
+  $scope.$on('table_selected', function(event, payload) {
+    c.data.selectedTable = payload.table;
+    c.data.connection    = payload.connection;
+    c.server.get({ action: 'get_records', table: payload.table, connection: payload.connection })
+      .then(function(r) { c.data.records = r.data.records; });
+  });
+  
+  c.selectAll = function($event) {
+    var checked = $event.target.checked;
+    c.data.records.forEach(function(r) { r.selected = checked; });
+  };
+  
+  c.getSelected = function() {
+    return c.data.records.filter(function(r) { return r.selected; });
+  };
+  
+  c.migrateNow = function() {
+    var selected = c.getSelected();
+    if (!selected.length) { alert('Please select at least one record.'); return; }
+    c.data.migrating = true;
+    c.data.progress  = 0;
+    c.data.status    = 'Starting migration...';
+    var sysIds = selected.map(function(r) { return r.sys_id; });
+    c.server.get({
+      action:     'migrate_now',
+      table:      c.data.selectedTable,
+      sysIds:     sysIds,
+      connection: c.data.connection
+    }).then(function(r) {
+      c.data.progress  = 100;
+      c.data.status    = 'Migration complete. Success: ' + r.data.success + ', Failed: ' + r.data.failed;
+      c.data.migrating = false;
+    });
+  };
+  
+  c.addToQueue = function() {
+    var selected = c.getSelected();
+    if (!selected.length) { alert('Please select records first.'); return; }
+    var sysIds = selected.map(function(r) { return r.sys_id; });
+    c.server.get({ action: 'add_to_queue', table: c.data.selectedTable, sysIds: sysIds })
+      .then(function(r) { alert(r.data.added + ' record(s) added to queue.'); });
+  };
+  
+  c.removeSelection = function() {
+    c.data.records.forEach(function(r) { r.selected = false; });
+  };
+}]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css/&gt;&lt;data_table&gt;sp_instance&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list/&gt;&lt;has_preview&gt;false&lt;/has_preview&gt;&lt;id&gt;tracenow-records&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link&gt;&lt;![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]&gt;&lt;/link&gt;&lt;name&gt;TraceNow Records&lt;/name&gt;&lt;option_schema/&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles/&gt;&lt;script&gt;&lt;![CDATA[(function() {
+  var dm = new dm_test();
+  var conn = input &amp;&amp; input.connection;
+  if (conn) {
+    dm.SOURCE_URL  = conn.sourceUrl;
+    dm.SOURCE_USER = conn.username;
+    dm.SOURCE_PSWD = conn.password;
+  }
+  
+  if (input.action === 'get_records') {
+    var api = new sn_ws.RESTMessageV2();
+    api.setEndpoint(conn.sourceUrl + '/api/now/table/' + input.table +
+      '?sysparm_limit=100&amp;sysparm_display_value=false&amp;sysparm_fields=sys_id,number,short_description,state');
+    api.setHttpMethod('GET');
+    api.setBasicAuth(conn.username, conn.password);
+    var resp = api.execute();
+    data.records = resp.getStatusCode() == 200 ? JSON.parse(resp.getBody()).result : [];
+  }
+  
+  if (input.action === 'migrate_now') {
+    var results = dm.migrateRecords(conn.sourceUrl, conn.username, conn.password, input.table, input.sysIds);
+    data.success = results.success;
+    data.failed  = results.failed;
+  }
+  
+  if (input.action === 'add_to_queue') {
+    var added = dm.queueMigration(input.table, input.sysIds);
+    data.added = added;
+  }
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-06-02 18:06:03&lt;/sys_created_on&gt;&lt;sys_id&gt;ce98eee0c3d5031093c8b71d050131e6&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;TraceNow Records&lt;/sys_name&gt;&lt;sys_package display_value="TraceNow" source="x_1862238_tracenow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="TraceNow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_ce98eee0c3d5031093c8b71d050131e6&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-06-02 18:06:03&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;div class="tracenow-records"&gt;
+  &lt;h3&gt;Records — {{c.data.selectedTable}}&lt;/h3&gt;
+  &lt;div ng-if="!c.data.records.length"&gt;
+    &lt;p class="text-muted"&gt;No records loaded. Select a table first.&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;table class="table table-bordered table-hover" ng-if="c.data.records.length"&gt;
+    &lt;thead&gt;
+      &lt;tr&gt;
+        &lt;th&gt;&lt;input type="checkbox" ng-click="c.selectAll($event)"/&gt;&lt;/th&gt;
+        &lt;th&gt;Number&lt;/th&gt;
+        &lt;th&gt;Short Description&lt;/th&gt;
+        &lt;th&gt;State&lt;/th&gt;
+        &lt;th&gt;Sys ID&lt;/th&gt;
+      &lt;/tr&gt;
+    &lt;/thead&gt;
+    &lt;tbody&gt;
+      &lt;tr ng-repeat="rec in c.data.records"&gt;
+        &lt;td&gt;&lt;input type="checkbox" ng-model="rec.selected"/&gt;&lt;/td&gt;
+        &lt;td&gt;{{rec.number}}&lt;/td&gt;
+        &lt;td&gt;{{rec.short_description}}&lt;/td&gt;
+        &lt;td&gt;{{rec.state}}&lt;/td&gt;
+        &lt;td&gt;{{rec.sys_id}}&lt;/td&gt;
+      &lt;/tr&gt;
+    &lt;/tbody&gt;
+  &lt;/table&gt;
+  
+  &lt;!-- Action Buttons --&gt;
+  &lt;div class="btn-group" ng-if="c.data.records.length"&gt;
+    &lt;button class="btn btn-success" ng-click="c.migrateNow()"&gt;Migrate Now&lt;/button&gt;
+    &lt;button class="btn btn-info"    ng-click="c.addToQueue()"&gt;Add to Queue&lt;/button&gt;
+    &lt;button class="btn btn-default" ng-click="c.removeSelection()"&gt;Remove Selection&lt;/button&gt;
+  &lt;/div&gt;
+  
+  &lt;!-- Live Progress Bar (shown during migration) --&gt;
+  &lt;div ng-if="c.data.migrating" style="margin-top:15px;"&gt;
+    &lt;p&gt;&lt;strong&gt;Live Migration Activity&lt;/strong&gt;&lt;/p&gt;
+    &lt;div class="progress"&gt;
+      &lt;div class="progress-bar" style="width: {{c.data.progress}}%"&gt;{{c.data.progress}}%&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;p&gt;{{c.data.status}}&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/div&gt;]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-375096570</payload_hash>
+        <record_name>TraceNow Records</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 18:06:03</sys_created_on>
+        <sys_id>47f82264c3d5031093c8b71d0501313d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e898399740000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 18:06:03</sys_updated_on>
+        <type>Widget</type>
+        <update_guid>07f822645ad5031029b75c84b5e82b3c</update_guid>
+        <update_guid_history>07f822645ad5031029b75c84b5e82b3c:-375096570</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="TraceNow Records">a39c59bcc31d431093c8b71d050131d3</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 07:10:52</sys_created_on>
+        <sys_db_object display_value="" name="sp_widget">sp_widget</sys_db_object>
+        <sys_id>0273d244a627427c801e72b0eec57a90</sys_id>
+        <sys_metadata>ce98eee0c3d5031093c8b71d050131e6</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Records</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sp_widget_ce98eee0c3d5031093c8b71d050131e6</sys_update_name>
+        <sys_update_version display_value="sp_widget_ce98eee0c3d5031093c8b71d050131e6">47f82264c3d5031093c8b71d0501313d</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 07:10:52</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

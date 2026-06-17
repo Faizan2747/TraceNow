@@ -1,0 +1,609 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="DELETE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function() {
+    var c = this;
+
+    // A counter to give each simulated instance a distinct name/URL number
+    var connectionCounter = 1;
+
+    // Triggers when the user clicks "+ New Connection"
+    c.newConnection = function() {
+        // 1. Construct a new card object dynamically
+        var simulatedConnection = {
+            id: 'conn_' + Date.now(), // Unique ID using standard millisecond timestamp
+            name: 'demo ' + connectionCounter,
+            url: 'https://sysusademo' + connectionCounter + '.service-now.com/',
+            username: 'bareen.makhdoomi',
+            lastUpdated: new Date().toLocaleString(), // Captures your current browser date & time
+            status: connectionCounter % 2 !== 0 ? 'Active' : 'Inactive', // Toggles status for visual variance
+            selected: connectionCounter === 2 // Card 2 gets the active gradient ring from image_395789.png
+        };
+
+        // 2. Append the new object directly into the array
+        c.data.connections.push(simulatedConnection);
+        
+        // 3. Increment our counter so the next card created is numbered correctly
+        connectionCounter++;
+    };
+
+    c.connect = function(conn) {
+        console.log("Initiating live sync handshake with: " + conn.name);
+    };
+
+    c.edit = function(conn) {
+        console.log("Opening editing workspace configuration map for: " + conn.name);
+    };
+
+    // Triggers when the user clicks "Delete" on a card
+    c.delete = function(conn) {
+        // Find where this card lives inside our array
+        var index = c.data.connections.indexOf(conn);
+        if (index > -1) {
+            // Slice it out of the array. AngularJS automatically updates the UI layout.
+            c.data.connections.splice(index, 1);
+            console.log("Safely purged cached workspace definition for: " + conn.name);
+        }
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-connections-widget {&#13;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;&#13;
+  color: #0f172a;&#13;
+  &#13;
+  .page-header {&#13;
+    display: flex;&#13;
+    justify-content: space-between;&#13;
+    align-items: center;&#13;
+    margin-bottom: 24px;&#13;
+    &#13;
+    .page-title {&#13;
+      font-size: 26px;&#13;
+      font-weight: 700;&#13;
+      color: #0c63e7;&#13;
+      margin: 0 0 4px 0;&#13;
+    }&#13;
+    &#13;
+    .page-subtitle {&#13;
+      color: #64748b;&#13;
+      font-size: 14px;&#13;
+      margin: 0;&#13;
+    }&#13;
+    &#13;
+    .btn-primary {&#13;
+      background: #0c63e7;&#13;
+      color: white;&#13;
+      border: none;&#13;
+      padding: 12px 24px;&#13;
+      border-radius: 8px;&#13;
+      font-weight: 600;&#13;
+      cursor: pointer;&#13;
+      box-shadow: 0 4px 10px rgba(12, 99, 231, 0.3);&#13;
+      transition: all 0.2s ease;&#13;
+      &amp;:hover { background: #0a52c2; transform: translateY(-1px); }&#13;
+    }&#13;
+  }&#13;
+&#13;
+  .security-banner {&#13;
+    display: flex;&#13;
+    align-items: center;&#13;
+    background: #ffffff;&#13;
+    border: 1px solid #e2e8f0;&#13;
+    border-radius: 12px;&#13;
+    padding: 16px 20px;&#13;
+    margin-bottom: 30px;&#13;
+    gap: 16px;&#13;
+    &#13;
+    .icon-circle {&#13;
+      color: #0c63e7;&#13;
+      font-size: 22px;&#13;
+      display: flex;&#13;
+      align-items: center;&#13;
+    }&#13;
+    &#13;
+    .banner-text {&#13;
+      strong { display: block; font-size: 14px; color: #0f172a; margin-bottom: 2px; }&#13;
+      p { margin: 0; font-size: 13px; color: #64748b; }&#13;
+    }&#13;
+  }&#13;
+&#13;
+  .connections-grid {&#13;
+    display: grid;&#13;
+    grid-template-columns: repeat(2, 1fr);&#13;
+    gap: 24px;&#13;
+&#13;
+    .connection-card {&#13;
+      background: #ffffff;&#13;
+      border: 1px solid #e2e8f0;&#13;
+      border-radius: 16px;&#13;
+      padding: 24px;&#13;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);&#13;
+      transition: all 0.2s ease;&#13;
+      &#13;
+      /* Active Highlight Matching Image */&#13;
+      &amp;.selected-card {&#13;
+        background: linear-gradient(135deg, #eff6ff 0%, #e0eafc 100%);&#13;
+        border-color: #bfdbfe;&#13;
+        box-shadow: 0 10px 20px -5px rgba(12, 99, 231, 0.15);&#13;
+      }&#13;
+&#13;
+      .card-top {&#13;
+        display: flex;&#13;
+        justify-content: space-between;&#13;
+        align-items: flex-start;&#13;
+        margin-bottom: 4px;&#13;
+        &#13;
+        .conn-name {&#13;
+          font-size: 18px;&#13;
+          font-weight: 700;&#13;
+          color: #0c63e7;&#13;
+          margin: 0;&#13;
+        }&#13;
+&#13;
+        .status-badge {&#13;
+          padding: 4px 10px;&#13;
+          border-radius: 20px;&#13;
+          font-size: 12px;&#13;
+          font-weight: 600;&#13;
+          display: flex;&#13;
+          align-items: center;&#13;
+          gap: 6px;&#13;
+          &#13;
+          &amp;.active-badge { background: #dbeafe; color: #0c63e7; }&#13;
+          &amp;.inactive-badge { background: #fee2e2; color: #ef4444; }&#13;
+        }&#13;
+      }&#13;
+&#13;
+      .conn-url {&#13;
+        font-size: 13px;&#13;
+        color: #94a3b8;&#13;
+        text-decoration: none;&#13;
+        display: block;&#13;
+        margin-bottom: 20px;&#13;
+        &amp;:hover { text-decoration: underline; color: #0c63e7;}&#13;
+      }&#13;
+&#13;
+      .conn-details {&#13;
+        display: flex;&#13;
+        justify-content: space-between;&#13;
+        margin-bottom: 24px;&#13;
+        &#13;
+        .detail-group {&#13;
+          label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;}&#13;
+          span { font-size: 13px; font-weight: 600; color: #334155; }&#13;
+        }&#13;
+        .text-right { text-align: right; }&#13;
+      }&#13;
+&#13;
+      .card-actions {&#13;
+        display: flex;&#13;
+        gap: 12px;&#13;
+        &#13;
+        .btn-action {&#13;
+          padding: 8px 16px;&#13;
+          border-radius: 6px;&#13;
+          font-size: 13px;&#13;
+          font-weight: 600;&#13;
+          cursor: pointer;&#13;
+          border: none;&#13;
+          display: flex;&#13;
+          align-items: center;&#13;
+          gap: 6px;&#13;
+          transition: all 0.2s ease;&#13;
+        }&#13;
+        &#13;
+        .btn-connect { background: #eff6ff; color: #0c63e7; }&#13;
+        .btn-connect:hover { background: #dbeafe; }&#13;
+        &#13;
+        .btn-edit { background: #f1f5f9; color: #475569; }&#13;
+        .btn-edit:hover { background: #e2e8f0; }&#13;
+        &#13;
+        .btn-delete { background: #fef2f2; color: #ef4444; }&#13;
+        .btn-delete:hover { background: #fee2e2; }&#13;
+      }&#13;
+    }&#13;
+  }&#13;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tracenow-connections</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Connections</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    /* Initialize an empty array.
+       Later, this will be replaced with a GlideRecord query 
+       to pull saved connection records from a custom table. */
+    data.connections = [];
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:47:56</sys_created_on>
+        <sys_id>cfdf3660c399031093c8b71d050131a6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Connections</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_cfdf3660c399031093c8b71d050131a6</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:47:56</sys_updated_on>
+        <template><![CDATA[<div class="tn-connections-widget">
+  
+  <!-- PAGE HEADER & ACTION CTA -->
+  <div class="page-header">
+    <div class="header-titles">
+      <h1 class="page-title">Connections</h1>
+      <p class="page-subtitle">Manage your ServiceNow instance connections</p>
+    </div>
+    <button class="btn-primary" ng-click="c.newConnection()">+ New Connection</button>
+  </div>
+
+  <!-- SECURITY NOTICE PANEL -->
+  <div class="security-banner">
+    <div class="icon-circle">
+      <i class="fa fa-info-circle"></i>
+    </div>
+    <div class="banner-text">
+      <strong>Secure Connection Storage</strong>
+      <p>Your connection credentials are encrypted and stored securely. You only need to configure them once.</p>
+    </div>
+  </div>
+
+  <!-- DYNAMIC GRID CANVAS -->
+  <div class="connections-grid">
+    
+    <!-- This block repeats effortlessly for every item inside your client array -->
+    <div class="connection-card" ng-repeat="conn in c.data.connections" ng-class="{'selected-card': conn.selected}">
+      
+      <div class="card-top">
+        <h3 class="conn-name">{{::conn.name}}</h3>
+        <span class="status-badge" ng-class="{'active-badge': conn.status === 'Active', 'inactive-badge': conn.status === 'Inactive'}">
+          <i class="fa" ng-class="{'fa-check-circle': conn.status === 'Active', 'fa-times-circle': conn.status === 'Inactive'}"></i> {{::conn.status}}
+        </span>
+      </div>
+      
+      <a href="{{::conn.url}}" target="_blank" class="conn-url">{{::conn.url}}</a>
+      
+      <div class="conn-details">
+        <div class="detail-group">
+          <label>Username</label>
+          <span>{{::conn.username}}</span>
+        </div>
+        <div class="detail-group text-right">
+          <label>Last Updated</label>
+          <span>{{::conn.lastUpdated}}</span>
+        </div>
+      </div>
+
+      <div class="card-actions">
+        <button class="btn-action btn-connect" ng-click="c.connect(conn)"><i class="fa fa-bolt"></i> Connect</button>
+        <button class="btn-action btn-edit" ng-click="c.edit(conn)"><i class="fa fa-pencil"></i> Edit</button>
+        <button class="btn-action btn-delete" ng-click="c.delete(conn)"><i class="fa fa-trash"></i> Delete</button>
+      </div>
+      
+    </div>
+    
+  </div>
+</div>]]></template>
+    </sp_widget>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sp_widget_cfdf3660c399031093c8b71d050131a6</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sp_widget"&gt;&lt;sp_widget action="INSERT_OR_UPDATE"&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[api.controller = function() {
+    var c = this;
+
+    // A counter to give each simulated instance a distinct name/URL number
+    var connectionCounter = 1;
+
+    // Triggers when the user clicks "+ New Connection"
+    c.newConnection = function() {
+        // 1. Construct a new card object dynamically
+        var simulatedConnection = {
+            id: 'conn_' + Date.now(), // Unique ID using standard millisecond timestamp
+            name: 'demo ' + connectionCounter,
+            url: 'https://sysusademo' + connectionCounter + '.service-now.com/',
+            username: 'bareen.makhdoomi',
+            lastUpdated: new Date().toLocaleString(), // Captures your current browser date &amp; time
+            status: connectionCounter % 2 !== 0 ? 'Active' : 'Inactive', // Toggles status for visual variance
+            selected: connectionCounter === 2 // Card 2 gets the active gradient ring from image_395789.png
+        };
+
+        // 2. Append the new object directly into the array
+        c.data.connections.push(simulatedConnection);
+        
+        // 3. Increment our counter so the next card created is numbered correctly
+        connectionCounter++;
+    };
+
+    c.connect = function(conn) {
+        console.log("Initiating live sync handshake with: " + conn.name);
+    };
+
+    c.edit = function(conn) {
+        console.log("Opening editing workspace configuration map for: " + conn.name);
+    };
+
+    // Triggers when the user clicks "Delete" on a card
+    c.delete = function(conn) {
+        // Find where this card lives inside our array
+        var index = c.data.connections.indexOf(conn);
+        if (index &gt; -1) {
+            // Slice it out of the array. AngularJS automatically updates the UI layout.
+            c.data.connections.splice(index, 1);
+            console.log("Safely purged cached workspace definition for: " + conn.name);
+        }
+    };
+};]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css&gt;.tn-connections-widget {&amp;#13;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;&amp;#13;
+  color: #0f172a;&amp;#13;
+  &amp;#13;
+  .page-header {&amp;#13;
+    display: flex;&amp;#13;
+    justify-content: space-between;&amp;#13;
+    align-items: center;&amp;#13;
+    margin-bottom: 24px;&amp;#13;
+    &amp;#13;
+    .page-title {&amp;#13;
+      font-size: 26px;&amp;#13;
+      font-weight: 700;&amp;#13;
+      color: #0c63e7;&amp;#13;
+      margin: 0 0 4px 0;&amp;#13;
+    }&amp;#13;
+    &amp;#13;
+    .page-subtitle {&amp;#13;
+      color: #64748b;&amp;#13;
+      font-size: 14px;&amp;#13;
+      margin: 0;&amp;#13;
+    }&amp;#13;
+    &amp;#13;
+    .btn-primary {&amp;#13;
+      background: #0c63e7;&amp;#13;
+      color: white;&amp;#13;
+      border: none;&amp;#13;
+      padding: 12px 24px;&amp;#13;
+      border-radius: 8px;&amp;#13;
+      font-weight: 600;&amp;#13;
+      cursor: pointer;&amp;#13;
+      box-shadow: 0 4px 10px rgba(12, 99, 231, 0.3);&amp;#13;
+      transition: all 0.2s ease;&amp;#13;
+      &amp;amp;:hover { background: #0a52c2; transform: translateY(-1px); }&amp;#13;
+    }&amp;#13;
+  }&amp;#13;
+&amp;#13;
+  .security-banner {&amp;#13;
+    display: flex;&amp;#13;
+    align-items: center;&amp;#13;
+    background: #ffffff;&amp;#13;
+    border: 1px solid #e2e8f0;&amp;#13;
+    border-radius: 12px;&amp;#13;
+    padding: 16px 20px;&amp;#13;
+    margin-bottom: 30px;&amp;#13;
+    gap: 16px;&amp;#13;
+    &amp;#13;
+    .icon-circle {&amp;#13;
+      color: #0c63e7;&amp;#13;
+      font-size: 22px;&amp;#13;
+      display: flex;&amp;#13;
+      align-items: center;&amp;#13;
+    }&amp;#13;
+    &amp;#13;
+    .banner-text {&amp;#13;
+      strong { display: block; font-size: 14px; color: #0f172a; margin-bottom: 2px; }&amp;#13;
+      p { margin: 0; font-size: 13px; color: #64748b; }&amp;#13;
+    }&amp;#13;
+  }&amp;#13;
+&amp;#13;
+  .connections-grid {&amp;#13;
+    display: grid;&amp;#13;
+    grid-template-columns: repeat(2, 1fr);&amp;#13;
+    gap: 24px;&amp;#13;
+&amp;#13;
+    .connection-card {&amp;#13;
+      background: #ffffff;&amp;#13;
+      border: 1px solid #e2e8f0;&amp;#13;
+      border-radius: 16px;&amp;#13;
+      padding: 24px;&amp;#13;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);&amp;#13;
+      transition: all 0.2s ease;&amp;#13;
+      &amp;#13;
+      /* Active Highlight Matching Image */&amp;#13;
+      &amp;amp;.selected-card {&amp;#13;
+        background: linear-gradient(135deg, #eff6ff 0%, #e0eafc 100%);&amp;#13;
+        border-color: #bfdbfe;&amp;#13;
+        box-shadow: 0 10px 20px -5px rgba(12, 99, 231, 0.15);&amp;#13;
+      }&amp;#13;
+&amp;#13;
+      .card-top {&amp;#13;
+        display: flex;&amp;#13;
+        justify-content: space-between;&amp;#13;
+        align-items: flex-start;&amp;#13;
+        margin-bottom: 4px;&amp;#13;
+        &amp;#13;
+        .conn-name {&amp;#13;
+          font-size: 18px;&amp;#13;
+          font-weight: 700;&amp;#13;
+          color: #0c63e7;&amp;#13;
+          margin: 0;&amp;#13;
+        }&amp;#13;
+&amp;#13;
+        .status-badge {&amp;#13;
+          padding: 4px 10px;&amp;#13;
+          border-radius: 20px;&amp;#13;
+          font-size: 12px;&amp;#13;
+          font-weight: 600;&amp;#13;
+          display: flex;&amp;#13;
+          align-items: center;&amp;#13;
+          gap: 6px;&amp;#13;
+          &amp;#13;
+          &amp;amp;.active-badge { background: #dbeafe; color: #0c63e7; }&amp;#13;
+          &amp;amp;.inactive-badge { background: #fee2e2; color: #ef4444; }&amp;#13;
+        }&amp;#13;
+      }&amp;#13;
+&amp;#13;
+      .conn-url {&amp;#13;
+        font-size: 13px;&amp;#13;
+        color: #94a3b8;&amp;#13;
+        text-decoration: none;&amp;#13;
+        display: block;&amp;#13;
+        margin-bottom: 20px;&amp;#13;
+        &amp;amp;:hover { text-decoration: underline; color: #0c63e7;}&amp;#13;
+      }&amp;#13;
+&amp;#13;
+      .conn-details {&amp;#13;
+        display: flex;&amp;#13;
+        justify-content: space-between;&amp;#13;
+        margin-bottom: 24px;&amp;#13;
+        &amp;#13;
+        .detail-group {&amp;#13;
+          label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;}&amp;#13;
+          span { font-size: 13px; font-weight: 600; color: #334155; }&amp;#13;
+        }&amp;#13;
+        .text-right { text-align: right; }&amp;#13;
+      }&amp;#13;
+&amp;#13;
+      .card-actions {&amp;#13;
+        display: flex;&amp;#13;
+        gap: 12px;&amp;#13;
+        &amp;#13;
+        .btn-action {&amp;#13;
+          padding: 8px 16px;&amp;#13;
+          border-radius: 6px;&amp;#13;
+          font-size: 13px;&amp;#13;
+          font-weight: 600;&amp;#13;
+          cursor: pointer;&amp;#13;
+          border: none;&amp;#13;
+          display: flex;&amp;#13;
+          align-items: center;&amp;#13;
+          gap: 6px;&amp;#13;
+          transition: all 0.2s ease;&amp;#13;
+        }&amp;#13;
+        &amp;#13;
+        .btn-connect { background: #eff6ff; color: #0c63e7; }&amp;#13;
+        .btn-connect:hover { background: #dbeafe; }&amp;#13;
+        &amp;#13;
+        .btn-edit { background: #f1f5f9; color: #475569; }&amp;#13;
+        .btn-edit:hover { background: #e2e8f0; }&amp;#13;
+        &amp;#13;
+        .btn-delete { background: #fef2f2; color: #ef4444; }&amp;#13;
+        .btn-delete:hover { background: #fee2e2; }&amp;#13;
+      }&amp;#13;
+    }&amp;#13;
+  }&amp;#13;
+}&lt;/css&gt;&lt;data_table&gt;sp_instance&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list/&gt;&lt;has_preview&gt;false&lt;/has_preview&gt;&lt;id&gt;tracenow-connections&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link&gt;&lt;![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]&gt;&lt;/link&gt;&lt;name&gt;TraceNow Connections&lt;/name&gt;&lt;option_schema/&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles/&gt;&lt;script&gt;&lt;![CDATA[(function() {
+    /* Initialize an empty array.
+       Later, this will be replaced with a GlideRecord query 
+       to pull saved connection records from a custom table. */
+    data.connections = [];
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-06-02 19:47:56&lt;/sys_created_on&gt;&lt;sys_id&gt;cfdf3660c399031093c8b71d050131a6&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;TraceNow Connections&lt;/sys_name&gt;&lt;sys_package display_value="TraceNow" source="x_1862238_tracenow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="TraceNow"&gt;464e42acc3d1031093c8b71d050131c2&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_cfdf3660c399031093c8b71d050131a6&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-06-02 19:47:56&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;div class="tn-connections-widget"&gt;
+  
+  &lt;!-- PAGE HEADER &amp; ACTION CTA --&gt;
+  &lt;div class="page-header"&gt;
+    &lt;div class="header-titles"&gt;
+      &lt;h1 class="page-title"&gt;Connections&lt;/h1&gt;
+      &lt;p class="page-subtitle"&gt;Manage your ServiceNow instance connections&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;button class="btn-primary" ng-click="c.newConnection()"&gt;+ New Connection&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;!-- SECURITY NOTICE PANEL --&gt;
+  &lt;div class="security-banner"&gt;
+    &lt;div class="icon-circle"&gt;
+      &lt;i class="fa fa-info-circle"&gt;&lt;/i&gt;
+    &lt;/div&gt;
+    &lt;div class="banner-text"&gt;
+      &lt;strong&gt;Secure Connection Storage&lt;/strong&gt;
+      &lt;p&gt;Your connection credentials are encrypted and stored securely. You only need to configure them once.&lt;/p&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;!-- DYNAMIC GRID CANVAS --&gt;
+  &lt;div class="connections-grid"&gt;
+    
+    &lt;!-- This block repeats effortlessly for every item inside your client array --&gt;
+    &lt;div class="connection-card" ng-repeat="conn in c.data.connections" ng-class="{'selected-card': conn.selected}"&gt;
+      
+      &lt;div class="card-top"&gt;
+        &lt;h3 class="conn-name"&gt;{{::conn.name}}&lt;/h3&gt;
+        &lt;span class="status-badge" ng-class="{'active-badge': conn.status === 'Active', 'inactive-badge': conn.status === 'Inactive'}"&gt;
+          &lt;i class="fa" ng-class="{'fa-check-circle': conn.status === 'Active', 'fa-times-circle': conn.status === 'Inactive'}"&gt;&lt;/i&gt; {{::conn.status}}
+        &lt;/span&gt;
+      &lt;/div&gt;
+      
+      &lt;a href="{{::conn.url}}" target="_blank" class="conn-url"&gt;{{::conn.url}}&lt;/a&gt;
+      
+      &lt;div class="conn-details"&gt;
+        &lt;div class="detail-group"&gt;
+          &lt;label&gt;Username&lt;/label&gt;
+          &lt;span&gt;{{::conn.username}}&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div class="detail-group text-right"&gt;
+          &lt;label&gt;Last Updated&lt;/label&gt;
+          &lt;span&gt;{{::conn.lastUpdated}}&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div class="card-actions"&gt;
+        &lt;button class="btn-action btn-connect" ng-click="c.connect(conn)"&gt;&lt;i class="fa fa-bolt"&gt;&lt;/i&gt; Connect&lt;/button&gt;
+        &lt;button class="btn-action btn-edit" ng-click="c.edit(conn)"&gt;&lt;i class="fa fa-pencil"&gt;&lt;/i&gt; Edit&lt;/button&gt;
+        &lt;button class="btn-action btn-delete" ng-click="c.delete(conn)"&gt;&lt;i class="fa fa-trash"&gt;&lt;/i&gt; Delete&lt;/button&gt;
+      &lt;/div&gt;
+      
+    &lt;/div&gt;
+    
+  &lt;/div&gt;
+&lt;/div&gt;]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-1639074286</payload_hash>
+        <record_name>TraceNow Connections</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:47:56</sys_created_on>
+        <sys_id>a340cf60c399031093c8b71d05013105</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e89e0e18b0000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:47:56</sys_updated_on>
+        <type>Widget</type>
+        <update_guid>6340cf602d990310d258ef47de5fce04</update_guid>
+        <update_guid_history>6340cf602d990310d258ef47de5fce04:-1639074286</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="TraceNow Connections">a5c043e0c399031093c8b71d050131c3</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:49:59</sys_created_on>
+        <sys_db_object display_value="" name="sp_widget">sp_widget</sys_db_object>
+        <sys_id>290e5e7f47804ddcbf5b39fcb1087dd9</sys_id>
+        <sys_metadata>cfdf3660c399031093c8b71d050131a6</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Connections</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sp_widget_cfdf3660c399031093c8b71d050131a6</sys_update_name>
+        <sys_update_version display_value="sp_widget_cfdf3660c399031093c8b71d050131a6">a340cf60c399031093c8b71d05013105</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:49:59</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

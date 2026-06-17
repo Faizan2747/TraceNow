@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="af6cea13c399831093c8b71d05013140" label="Export Job" max_length="40" name="x_1862238_tracenow_export_job" type="collection">
+        <element label="Table Name" max_length="80" name="table_name" type="string"/>
+        <element label="Record Number" max_length="400" name="record_number" type="string"/>
+        <element label="Percent Complete" max_length="40" name="percent_complete" type="integer"/>
+        <element choice="3" default="processing" label="Status" max_length="255" name="status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Failed" sequence="2" value="failed"/>
+                <element inactive_on_update="false" label="Processing" sequence="0" value="processing"/>
+                <element inactive_on_update="false" label="Success" sequence="1" value="success"/>
+            </choice>
+        </element>
+    </element>
+</database>

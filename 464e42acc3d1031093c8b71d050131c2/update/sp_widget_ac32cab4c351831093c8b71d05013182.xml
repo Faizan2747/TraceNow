@@ -1,0 +1,695 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $window, spUtil, $rootScope) {
+    var c = this;
+    c.showModal = false;
+    c.validationError = "";
+    c.isEdit = false;
+    c.currentSysId = "";
+    c.processingId = ""; 
+    c.isProcessingModal = false;
+
+    c.connectInstance = function(item) {
+        c.processingId = item.sys_id;
+        spUtil.addInfoMessage("Establishing session with " + item.instance_name + "...");
+        
+        c.server.get({ action: 'connectInstance', sys_id: item.sys_id }).then(function(response) {
+            c.processingId = "";
+            if (response.data && response.data.status === 'success') {
+                // FIX: Update the array in place without breaking the reference
+                angular.copy(response.data.connections, c.data.connections);
+                
+                spUtil.addInfoMessage("Successfully connected to " + item.instance_name + ".");
+                $rootScope.$broadcast('tracenow_connection_updated');
+            } else {
+                spUtil.addErrorMessage(response.data.error || "Connection failed.");
+            }
+        });
+    };
+
+    c.disconnectInstance = function(item) {
+        c.processingId = item.sys_id;
+        
+        c.server.get({ action: 'disconnectInstance', sys_id: item.sys_id }).then(function(response) {
+            c.processingId = "";
+            if (response.data && response.data.status === 'success') {
+                // FIX: Update the array in place without breaking the reference
+                angular.copy(response.data.connections, c.data.connections);
+                
+                spUtil.addInfoMessage("Disconnected from " + item.instance_name + ". Reverted to Local Data.");
+                $rootScope.$broadcast('tracenow_connection_updated');
+            }
+        });
+    };
+
+    c.openModal = function() {
+        c.isEdit = false;
+        c.currentSysId = "";
+        c.instance_name = '';
+        c.source_instance_url = '';
+        c.username = '';
+        c.password = '';
+        c.showModal = true;
+        c.validationError = "";
+        c.isProcessingModal = false;
+    };
+
+    c.closeModal = function() {
+        c.showModal = false;
+        c.validationError = "";
+        c.isProcessingModal = false;
+    };
+
+    c.editConnection = function(item) {
+        c.isEdit = true;
+        c.currentSysId = item.sys_id;
+        c.instance_name = item.instance_name;
+        c.source_instance_url = item.source_instance_url;
+        c.username = item.username;
+        c.password = ''; 
+        c.showModal = true;
+        c.validationError = "";
+    };
+
+    c.deleteConnection = function(item) {
+        if (confirm("Permanently delete connection '" + item.instance_name + "'?")) {
+            c.processingId = item.sys_id;
+            
+            c.server.get({ action: 'deleteConnection', sys_id: item.sys_id }).then(function(response) {
+                c.processingId = "";
+                if (response.data && response.data.status === 'success') {
+                    // FIX here as well
+                    angular.copy(response.data.connections, c.data.connections);
+                    spUtil.addInfoMessage("Connection deleted.");
+									$rootScope.$broadcast('tracenow_connection_updated');
+                }
+            });
+        }
+    };
+
+    c.submitConnection = function() {
+        c.validationError = "";
+        if (!c.instance_name || !c.source_instance_url || !c.username || (!c.password && !c.isEdit)) {
+            c.validationError = "Please fill in all mandatory fields.";
+            return;
+        }
+
+        c.isProcessingModal = true;
+        var payload = {
+            action: c.isEdit ? 'updateConnection' : 'insertConnection',
+            sys_id: c.currentSysId,
+            instance_name: c.instance_name,
+            source_instance_url: c.source_instance_url,
+            username: c.username,
+            password: c.password 
+        };
+
+        c.server.get(payload).then(function(response) {
+            c.isProcessingModal = false;
+            if (response.data && response.data.status === 'success') {
+
+    angular.copy(response.data.connections, c.data.connections);
+
+    c.closeModal();
+
+    spUtil.addInfoMessage(
+        c.isEdit ? "Connection updated." : "Connection saved."
+    );
+
+    // Notify all widgets
+    $rootScope.$broadcast('tracenow_connection_updated');
+
+
+            } else if (response.data && response.data.error) {
+                c.validationError = response.data.error;
+            } else {
+                c.validationError = "An unexpected error occurred.";
+            }
+        });
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-connections-wrapper {
+  padding: 20px;
+  background-color: #f8fafc;
+  width: 100%;
+}
+
+/* Header UI Elements */
+.tn-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.tn-main-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 0 0 4px 0;
+}
+
+.tn-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.tn-btn-add {
+  background-color: #0c63e7;
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tn-btn-add:hover {
+  background-color: #0b54c5;
+}
+
+/* Storage Notification Banner */
+.tn-secure-banner {
+  display: flex;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.tn-banner-icon {
+  font-size: 18px;
+  color: #0c63e7;
+}
+
+.tn-banner-content strong {
+  display: block;
+  font-size: 14px;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.tn-banner-content p {
+  font-size: 13px;
+  color: #475569;
+  margin: 0;
+}
+
+/* Dynamic Grid Layout - Banish Wasted Space */
+.tn-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+/* Card Styling &amp; States */
+.tn-conn-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease-in-out;
+}
+
+.active-card {
+  border: 1px solid #bae6fd;
+  background-color: #f0f9ff;
+  box-shadow: 0 10px 15px -3px rgba(12, 99, 231, 0.05);
+}
+
+.tn-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tn-instance-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0c63e7;
+  margin: 0;
+}
+
+/* Status Badges */
+.tn-status-pill {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tn-status-pill.pill-active {
+  background: #e0f2fe;
+  color: #0c63e7;
+}
+
+.tn-card-body-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
+  gap: 10px;
+}
+
+.tn-meta-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tn-meta-label {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.tn-meta-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.text-right {
+  text-align: right;
+  align-items: flex-end;
+}
+
+/* Card Action Buttons */
+.tn-card-footer-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.tn-card-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-connect { background: #0c63e7; color: white; border: none; }
+.btn-connect:hover { background: #0b54c5; }
+.btn-connected-state { background: #e2e8f0; color: #94a3b8; border: none; cursor: not-allowed; }
+.btn-edit { background: white; color: #334155; border: 1px solid #cbd5e1; }
+.btn-edit:hover { background: #f8fafc; }
+.btn-delete { background: white; color: #ef4444; border: 1px solid #fee2e2; }
+.btn-delete:hover { background: #fff5f5; }
+
+/* Shell-Isolated Modal Layers */
+.custom-modal-backdrop { 
+  position: fixed; 
+  top: 0; left: 0; width: 100%; height: 100%; 
+  background: rgba(15, 23, 42, 0.4); 
+  z-index: 9998; 
+}
+
+.custom-modal { 
+  position: fixed; 
+  top: 50%; left: 50%; 
+  transform: translate(-50%, -50%); 
+  background: #ffffff; 
+  border-radius: 12px; 
+  width: 480px; 
+  max-width: 95%; 
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+  z-index: 9999; 
+}
+
+.modal-header-custom { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 16px 24px; 
+  border-bottom: 1px solid #e2e8f0; 
+  background-color: #0c63e7; 
+  color: white; 
+  border-top-left-radius: 12px; 
+  border-top-right-radius: 12px; 
+}
+
+.modal-header-custom h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: #ffffff; opacity: 0.8; }
+.close-btn:hover { opacity: 1; }
+.modal-body-custom { padding: 24px; }
+.form-group-custom { margin-bottom: 16px; }
+.form-group-custom label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.form-control-custom { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+.modal-footer-custom { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
+.btn-cancel { background: #ffffff; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.btn-submit { background: #0c63e7; border: none; color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+
+
+
+/* New specific Button Styles */
+.tn-btn-local {
+  background-color: #10b981; /* Green */
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.tn-btn-local:hover { background-color: #059669; }
+
+.btn-disconnect { background: #fee2e2; color: #ef4444; border: none; }
+.btn-disconnect:hover { background: #fecaca; }
+
+/* Disabled button states for processing */
+button:disabled { opacity: 0.6; cursor: not-allowed !important; }</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow_connections</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Connections</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    function normalizeUrl(urlStr) {
+        if (!urlStr) return '';
+        return String(urlStr).trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    }
+
+    // 1. COMPILE GRID (Only fetch actual DB records)
+    function compileConnectionGrid() {
+        data.connections = [];
+        var fetchGR = new GlideRecord('x_1862238_tracenow_connections');
+        if (fetchGR.isValid()) {
+            fetchGR.orderByDesc('sys_updated_on');
+            fetchGR.query();
+            while (fetchGR.next()) {
+                data.connections.push({
+                    sys_id: fetchGR.getUniqueValue(),
+                    instance_name: fetchGR.getValue('instance_name') || '',
+                    source_instance_url: fetchGR.getValue('source_instance_url') || '',
+                    username: fetchGR.getValue('username') || '',
+                    status: fetchGR.getValue('status') || 'Inactive', 
+                    updated: fetchGR.getDisplayValue('sys_updated_on') || ''
+                });
+            }
+        }
+    }
+
+    if (!input) {
+        compileConnectionGrid();
+        return;
+    }
+
+    var actionSource = input; 
+
+    // 2. DISCONNECT
+    if (actionSource.action === 'disconnectInstance') {
+        var disGR = new GlideRecord('x_1862238_tracenow_connections');
+        disGR.query();
+        while (disGR.next()) {
+            disGR.setValue('status', 'Inactive');
+            disGR.update();
+        }
+        data.status = 'success';
+        compileConnectionGrid();
+        return;
+    }
+
+    // 3. CONNECT
+    if (actionSource.action === 'connectInstance') {
+        var targetSysId = actionSource.sys_id;
+        var grTarget = new GlideRecord('x_1862238_tracenow_connections');
+        
+        if (grTarget.get(targetSysId)) {
+            try {
+                var targetUrl = grTarget.getValue('source_instance_url');
+                var username = grTarget.getValue('username');
+                var password = '';
+                try { password = grTarget.password.getDecryptedValue(); } 
+                catch(err) { password = grTarget.getValue('password'); }
+                if (!password) password = grTarget.getValue('password');
+
+                var testEndpoint = targetUrl + "/api/now/table/incident?sysparm_limit=1";
+                var request = new sn_ws.RESTMessageV2();
+                request.setEndpoint(testEndpoint);
+                request.setHttpMethod('GET');
+                request.setBasicAuth(String(username), String(password)); 
+                request.setHttpTimeout(8000);
+
+                var response = request.execute();
+                if (response.getStatusCode() === 200 || response.getStatusCode() === 201) {
+                    var grReset = new GlideRecord('x_1862238_tracenow_connections');
+                    grReset.query();
+                    while (grReset.next()) {
+                        grReset.setValue('status', (grReset.getUniqueValue() === targetSysId) ? 'Active' : 'Inactive');
+                        grReset.update();
+                    }
+                    data.status = 'success';
+                } else {
+                    data.status = 'error';
+                    data.error = "Auth Error (HTTP " + response.getStatusCode() + ").";
+                }
+            } catch (ex) {
+                data.status = 'error';
+                data.error = "Connection failed: " + ex.message;
+            }
+        }
+        compileConnectionGrid();
+        return;
+    }
+
+    // 4. DELETE
+    if (actionSource.action === 'deleteConnection') {
+        var grDel = new GlideRecord('x_1862238_tracenow_connections');
+        if (grDel.get(actionSource.sys_id)) {
+            grDel.deleteRecord();
+            data.status = 'success';
+        }
+        compileConnectionGrid();
+        return;
+    }
+
+    // 5. INSERT/UPDATE
+    if (actionSource.action === 'insertConnection' || actionSource.action === 'updateConnection') {
+        try {
+            var rawTargetUrl = actionSource.source_instance_url ? actionSource.source_instance_url.toString().trim() : '';
+            if (rawTargetUrl.endsWith('/')) { rawTargetUrl = rawTargetUrl.substring(0, rawTargetUrl.length - 1); }
+            
+            var localSysUrl = gs.getProperty('glide.servlet.uri', '');
+            if (normalizeUrl(rawTargetUrl) === normalizeUrl(localSysUrl)) {
+                data.status = 'error'; data.error = "You cannot add the local instance as a remote connection.";
+                compileConnectionGrid(); return;
+            }
+
+            var dupGR = new GlideRecord('x_1862238_tracenow_connections');
+            dupGR.query();
+            var hasDuplicate = false;
+            while(dupGR.next()) {
+                if (actionSource.action === 'updateConnection' && dupGR.getUniqueValue() === actionSource.sys_id) continue;
+                if (normalizeUrl(dupGR.getValue('source_instance_url')) === normalizeUrl(rawTargetUrl)) {
+                    hasDuplicate = true; break;
+                }
+            }
+            if (hasDuplicate) {
+                data.status = 'error'; data.error = "A connection profile for this URL already exists.";
+                compileConnectionGrid(); return;
+            }
+
+            var clearUser = actionSource.username ? String(actionSource.username).trim() : '';
+            var clearPass = actionSource.password ? String(actionSource.password) : '';
+
+            if (actionSource.action === 'updateConnection' && !clearPass) {
+                var passGR = new GlideRecord('x_1862238_tracenow_connections');
+                if (passGR.get(actionSource.sys_id)) {
+                    try { clearPass = passGR.password.getDecryptedValue(); } catch(e) { clearPass = passGR.getValue('password'); }
+                }
+            }
+
+            var requestCheck = new sn_ws.RESTMessageV2();
+            requestCheck.setEndpoint(rawTargetUrl + "/api/now/table/incident?sysparm_limit=1");
+            requestCheck.setHttpMethod('GET');
+            requestCheck.setBasicAuth(clearUser, clearPass);
+            requestCheck.setHttpTimeout(10000); 
+
+            var responseRest = requestCheck.execute();
+            if (responseRest.getStatusCode() === 200 || responseRest.getStatusCode() === 201) {
+                var gr = new GlideRecord('x_1862238_tracenow_connections');
+                var isSuccess = false;
+                if (actionSource.action === 'insertConnection' && gr.canCreate()) {
+                    gr.initialize();
+                    gr.setValue('instance_name', actionSource.instance_name);
+                    gr.setValue('source_instance_url', rawTargetUrl);
+                    gr.setValue('username', clearUser);
+                    gr.setValue('password', clearPass); 
+                    gr.setValue('status', 'Inactive'); 
+                    isSuccess = gr.insert();
+                } else if (actionSource.action === 'updateConnection' && gr.get(actionSource.sys_id)) {
+                    gr.setValue('instance_name', actionSource.instance_name);
+                    gr.setValue('source_instance_url', rawTargetUrl);
+                    gr.setValue('username', clearUser);
+                    if (actionSource.password) gr.setValue('password', clearPass);
+                    isSuccess = gr.update();
+                }
+                data.status = isSuccess ? 'success' : 'error';
+            } else {
+                data.status = 'error'; data.error = "Instance returned HTTP " + responseRest.getStatusCode();
+            }
+        } catch (e) {
+            data.status = 'error'; data.error = "Connection test failed: " + e.message;
+        }
+        compileConnectionGrid();
+        return; 
+    }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 09:56:30</sys_created_on>
+        <sys_id>ac32cab4c351831093c8b71d05013182</sys_id>
+        <sys_mod_count>35</sys_mod_count>
+        <sys_name>TraceNow Connections</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_ac32cab4c351831093c8b71d05013182</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-09 10:45:06</sys_updated_on>
+        <template><![CDATA[<div class="tn-connections-wrapper">
+  <div class="tn-header-row">
+    <div class="tn-title-block">
+      <h1 class="tn-main-title">Connections</h1>
+      <p class="tn-subtitle">Manage your ServiceNow instance connections</p>
+    </div>
+    <div style="display: flex; gap: 12px;">
+      <button type="button" class="tn-btn-add" ng-click="c.openModal()">
+        <i class="fa fa-plus"></i> New Connection
+      </button>
+    </div>
+  </div>
+
+  <div class="tn-secure-banner">
+    <div class="tn-banner-icon">
+      <i class="fa fa-shield"></i>
+    </div>
+    <div class="tn-banner-content">
+      <strong>Secure Connection Storage</strong>
+      <p>Your connection credentials are encrypted and stored securely. You only need to configure them once.</p>
+    </div>
+  </div>
+
+  <div class="tn-grid-container">
+    <div class="tn-conn-card" ng-repeat="item in c.data.connections track by item.sys_id" ng-class="{'active-card': item.status === 'Active'}">
+      <div class="tn-card-header">
+        <h2 class="tn-instance-title">{{item.instance_name || 'Connection'}}</h2>
+        <span class="tn-status-pill" ng-class="{'pill-active': item.status === 'Active'}">
+          <i class="fa" ng-class="item.status === 'Active' ? 'fa-check-circle' : 'fa-minus-circle'"></i> 
+          {{item.status || 'Inactive'}}
+        </span>
+      </div>
+      
+      <div class="tn-card-body-row">
+        <div class="tn-meta-group">
+          <span class="tn-meta-label">Username</span>
+          <span class="tn-meta-value">{{item.username}}</span>
+        </div>
+        <div class="tn-meta-group text-right">
+          <span class="tn-meta-label">Last Updated</span>
+          <span class="tn-meta-value">{{item.updated}}</span>
+        </div>
+      </div>
+      
+      <div class="tn-card-body-row" style="border-top: none; padding-top: 0; margin-bottom: 15px;">
+        <div class="tn-meta-group" style="width: 100%;">
+          <span class="tn-meta-label">Source URL</span>
+          <span class="tn-meta-value" style="color: #64748b; font-weight: normal;">{{item.source_instance_url}}</span>
+        </div>
+      </div>
+
+      <div class="tn-card-footer-actions">
+        <button type="button" class="tn-card-btn btn-connect" ng-if="item.status !== 'Active'" ng-click="c.connectInstance(item)" ng-disabled="c.processingId === item.sys_id">
+          <i class="fa" ng-class="c.processingId === item.sys_id ? 'fa-circle-o-notch fa-spin' : 'fa-plug'"></i> Connect
+        </button>
+        <button type="button" class="tn-card-btn btn-disconnect" ng-if="item.status === 'Active'" ng-click="c.disconnectInstance(item)" ng-disabled="c.processingId === item.sys_id">
+          <i class="fa" ng-class="c.processingId === item.sys_id ? 'fa-circle-o-notch fa-spin' : 'fa-power-off'"></i> Disconnect
+        </button>
+        <button type="button" class="tn-card-btn btn-edit" ng-click="c.editConnection(item)" ng-disabled="c.processingId"><i class="fa fa-pencil"></i> Edit</button>
+        <button type="button" class="tn-card-btn btn-delete" ng-click="c.deleteConnection(item)" ng-disabled="c.processingId"><i class="fa fa-trash-o"></i> Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-modal-backdrop" ng-if="c.showModal" ng-click="c.closeModal()"></div>
+  <div class="custom-modal" ng-if="c.showModal">
+    <div class="modal-header-custom">
+      <h3><i class="fa fa-link"></i> {{c.isEdit ? 'Edit' : 'Add Source'}} Instance</h3>
+      <button type="button" class="close-btn" ng-click="c.closeModal()">&times;</button>
+    </div>
+    
+    <form ng-submit="c.submitConnection()">
+      <div class="modal-body-custom">
+        <div class="alert alert-danger" ng-if="c.validationError" style="margin-bottom: 15px; padding: 10px; font-size: 13px;">
+          <i class="fa fa-exclamation-triangle"></i> {{c.validationError}}
+        </div>
+        <div class="form-group-custom">
+          <label>Instance Name <span class="text-danger">*</span></label>
+          <input type="text" ng-model="c.instance_name" placeholder="e.g., demo 10" class="form-control-custom">
+        </div>
+        <div class="form-group-custom">
+          <label>Source Instance URL <span class="text-danger">*</span></label>
+          <input type="text" ng-model="c.source_instance_url" placeholder="https://instance.service-now.com" class="form-control-custom">
+        </div>
+        <div class="form-group-custom">
+          <label>Username <span class="text-danger">*</span></label>
+          <input type="text" ng-model="c.username" placeholder="admin" class="form-control-custom">
+        </div>
+        <div class="form-group-custom">
+          <label>Password <span class="text-danger" ng-if="!c.isEdit">*</span></label>
+          <input type="password" ng-model="c.password" placeholder="{{c.isEdit ? 'Leave blank to keep existing password' : '••••••••'}}" class="form-control-custom">
+          <small ng-if="c.isEdit" class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Only enter a password if you are changing it.</small>
+        </div>
+      </div>
+      <div class="modal-footer-custom">
+        <button type="button" class="btn-cancel" ng-click="c.closeModal()" ng-disabled="c.isProcessingModal">Cancel</button>
+        <button type="submit" class="btn-submit" ng-disabled="c.isProcessingModal">
+          <i class="fa fa-circle-o-notch fa-spin" ng-if="c.isProcessingModal" style="margin-right: 5px;"></i>
+          {{c.isEdit ? 'Update' : 'Create'}} Connection
+        </button>
+      </div>
+    </form>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

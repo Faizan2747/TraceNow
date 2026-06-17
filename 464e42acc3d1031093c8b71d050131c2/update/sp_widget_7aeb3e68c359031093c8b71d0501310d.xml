@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($rootScope) {
+    var c = this;
+    
+    // Set Dashboard as the default active tab
+    c.activeView = 'dashboard';
+
+    // Function that runs when a menu item is clicked
+    c.switchTab = function(viewId) {
+        c.activeView = viewId;
+        
+        // Shout across the portal that the view has changed!
+        $rootScope.$broadcast('tracenow.nav.changed', viewId);
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-sidebar-widget {&#13;
+  width: 260px;&#13;
+  /* Assumes your header is 65px tall, making the sidebar fill the rest of the screen */&#13;
+  height: calc(100vh - 65px); &#13;
+  background: #ffffff;&#13;
+  border-right: 1px solid #eef2f6;&#13;
+  display: flex;&#13;
+  flex-direction: column;&#13;
+  justify-content: space-between;&#13;
+  padding: 24px 16px;&#13;
+  box-sizing: border-box;&#13;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;&#13;
+&#13;
+  .nav-stack {&#13;
+    display: flex;&#13;
+    flex-direction: column;&#13;
+    gap: 8px;&#13;
+    &#13;
+    .nav-tab {&#13;
+      display: flex;&#13;
+      justify-content: space-between;&#13;
+      align-items: center;&#13;
+      padding: 12px 16px;&#13;
+      color: #64748b;&#13;
+      text-decoration: none;&#13;
+      border-radius: 8px;&#13;
+      font-weight: 600;&#13;
+      font-size: 14.5px;&#13;
+      transition: all 0.2s ease;&#13;
+      &#13;
+      .nav-content {&#13;
+          display: flex;&#13;
+          align-items: center;&#13;
+          gap: 12px;&#13;
+          &#13;
+          .menu-icon { &#13;
+              font-size: 16px;&#13;
+              width: 20px;&#13;
+              text-align: center;&#13;
+          }&#13;
+      }&#13;
+      &#13;
+      /* Hover state for non-active items */&#13;
+      &amp;:hover:not(.active) { &#13;
+          background: #f8fafc; &#13;
+          color: #0f172a; &#13;
+      }&#13;
+      &#13;
+      /* Active state (Dashboard from your picture) */&#13;
+      &amp;.active {&#13;
+        background: #0c63e7;&#13;
+        color: #ffffff;&#13;
+        box-shadow: 0 4px 6px -1px rgba(12, 99, 231, 0.2);&#13;
+        &#13;
+        .chevron { &#13;
+            font-size: 12px; &#13;
+            opacity: 0.9; &#13;
+        }&#13;
+      }&#13;
+    }&#13;
+  }&#13;
+&#13;
+  /* The bottom icon */&#13;
+  .sidebar-footer {&#13;
+    padding: 10px;&#13;
+    &#13;
+    .footer-icon-btn {&#13;
+       width: 40px;&#13;
+       height: 40px;&#13;
+       border-radius: 8px;&#13;
+       background: #f1f5f9;&#13;
+       color: #64748b;&#13;
+       display: flex;&#13;
+       align-items: center;&#13;
+       justify-content: center;&#13;
+       cursor: pointer;&#13;
+       transition: all 0.2s ease;&#13;
+       &#13;
+       &amp;:hover {&#13;
+          background: #e2e8f0;&#13;
+          color: #0f172a;&#13;
+       }&#13;
+    }&#13;
+  }&#13;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>tracenow-sidebar</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Sidebar Widget</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    data.navItems = [
+        { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
+        { id: 'connections', label: 'Connections', icon: 'fa-link' },
+        { id: 'browse_tables', label: 'Browse Tables', icon: 'fa-database' },
+        { id: 'queue', label: 'Queue', icon: 'fa-shopping-cart' },
+        { id: 'reports', label: 'Reports', icon: 'fa-bar-chart' },
+        { id: 'analytics', label: 'Analytics', icon: 'fa-pie-chart' }
+    ];
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:29:56</sys_created_on>
+        <sys_id>7aeb3e68c359031093c8b71d0501310d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>TraceNow Sidebar Widget</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_7aeb3e68c359031093c8b71d0501310d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 19:29:56</sys_updated_on>
+        <template><![CDATA[<aside class="tn-sidebar-widget">
+  
+  <nav class="nav-stack">
+    <a href="javascript:void(0)" 
+       class="nav-tab" 
+       ng-repeat="item in c.data.navItems"
+       ng-click="c.switchTab(item.id)"
+       ng-class="{'active': c.activeView === item.id}">
+      
+      <div class="nav-content">
+          <i class="fa {{::item.icon}} menu-icon"></i> 
+          <span class="nav-label">{{::item.label}}</span>
+      </div>
+      
+      <i class="fa fa-chevron-right chevron" ng-if="c.activeView === item.id"></i>
+    </a>
+  </nav>
+  
+  <div class="sidebar-footer">
+    <div class="footer-icon-btn" title="Settings / Metrics">
+       <i class="fa fa-pie-chart"></i>
+    </div>
+  </div>
+  
+</aside>]]></template>
+    </sp_widget>
+</record_update>

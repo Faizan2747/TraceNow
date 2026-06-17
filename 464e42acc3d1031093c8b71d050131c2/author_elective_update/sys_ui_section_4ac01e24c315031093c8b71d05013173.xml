@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_ui_section action="DELETE" caption="" section_id="4ac01e24c315031093c8b71d05013173" sys_domain="global" table="x_1862238_tracenow_queue" version="3" view="">
+        <sys_ui_section action="DELETE">
+            <caption/>
+            <header>false</header>
+            <name>x_1862238_tracenow_queue</name>
+            <roles/>
+            <sys_class_name>sys_ui_section</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2026-06-02 16:20:18</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>4ac01e24c315031093c8b71d05013173</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_1862238_tracenow_queue</sys_name>
+            <sys_overrides/>
+            <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+            <sys_update_name>sys_ui_section_4ac01e24c315031093c8b71d05013173</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2026-06-02 16:20:18</sys_updated_on>
+            <sys_user/>
+            <title>true</title>
+            <view display_value="Default view" name="NULL">Default view</view>
+            <view_name/>
+        </sys_ui_section>
+    </sys_ui_section>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</application>
+        <file_path/>
+        <instance_id>46db179deb108710e483f459bad0cd1e</instance_id>
+        <instance_name>dev383144</instance_name>
+        <name>sys_ui_section_4ac01e24c315031093c8b71d05013173</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_ui_section caption="" section_id="4ac01e24c315031093c8b71d05013173" sys_domain="global" table="x_1862238_tracenow_queue" version="3" view=""><sys_ui_section action="INSERT_OR_UPDATE"><caption/><header>false</header><name>x_1862238_tracenow_queue</name><roles/><sys_class_name>sys_ui_section</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-06-02 16:20:18</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>4ac01e24c315031093c8b71d05013173</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_1862238_tracenow_queue</sys_name><sys_overrides/><sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package><sys_policy/><sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope><sys_update_name>sys_ui_section_4ac01e24c315031093c8b71d05013173</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-06-02 16:20:18</sys_updated_on><sys_user/><title>true</title><view display_value="Default view" name="NULL">Default view</view><view_name/></sys_ui_section></sys_ui_section></record_update>]]></payload>
+        <payload_hash>741228882</payload_hash>
+        <record_name>Queue</record_name>
+        <reverted_from/>
+        <source>1e4ec2acc3d1031093c8b71d0501310e</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 16:20:18</sys_created_on>
+        <sys_id>02c01e24c315031093c8b71d05013178</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>19e8922c8670000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-02 16:20:18</sys_updated_on>
+        <type>Form Layout</type>
+        <update_guid>cec01e24cc150310df1766ee56089b77</update_guid>
+        <update_guid_history>cec01e24cc150310df1766ee56089b77:741228882</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-17 18:56:38</sys_created_on>
+        <sys_db_object display_value="" name="sys_ui_section">sys_ui_section</sys_db_object>
+        <sys_id>cd150bd389964d48a8cb7c26513858c4</sys_id>
+        <sys_metadata>4ac01e24c315031093c8b71d05013173</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_1862238_tracenow_queue</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_parent display_value="">d5c01e24c315031093c8b71d05013193</sys_parent>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_scope_delete display_value="">0124093c0063457c802f77bdb63f4690</sys_scope_delete>
+        <sys_update_name>sys_ui_section_4ac01e24c315031093c8b71d05013173</sys_update_name>
+        <sys_update_version display_value="sys_ui_section_4ac01e24c315031093c8b71d05013173">02c01e24c315031093c8b71d05013178</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-17 18:56:38</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

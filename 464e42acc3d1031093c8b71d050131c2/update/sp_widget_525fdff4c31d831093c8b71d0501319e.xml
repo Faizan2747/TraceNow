@@ -1,0 +1,959 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $rootScope, spUtil, $window) {
+  var c = this;
+  c.showView = true;
+  c.showPreviewModal = false;
+  c.loadingPreview = false;
+  c.previewNumber = '';
+  c.previewFields = [];
+  c.migrating = false;
+  c.exporting = false; 
+
+  if (!$rootScope.tnQueue) {
+    $rootScope.tnQueue = [];
+  }
+
+  // --- NEW: CONNECTION TRACKER ---
+  // Memorize the connection state so we can detect when you disconnect/reconnect
+  if (typeof $rootScope.tnLastIsRemote === 'undefined') {
+      $rootScope.tnLastIsRemote = c.data.isRemote;
+  }
+
+  c.numberOfPages = function(totalItems, pageSize) {
+    return Math.ceil(totalItems / pageSize) || 1;
+  };
+
+  c.min = function(v1, v2) {
+    return Math.min(v1, v2);
+  };
+
+  c.viewQueueRecord = function(record, tableName) {
+    if (!record.sys_id || !tableName) {
+        spUtil.addErrorMessage("Unable to open preview: Missing record parameters.");
+        return;
+    }
+    c.previewNumber = record.number || 'Details';
+    c.previewFields = [];
+    c.showPreviewModal = true;
+    c.loadingPreview = true;
+
+    c.server.get({
+        action: 'get_single_record_details',
+        table: tableName,
+        sys_id: record.sys_id
+    }).then(function(response) {
+        if (response.data && response.data.singleRecord && angular.isArray(response.data.singleRecord)) {
+            c.previewFields = response.data.singleRecord;
+        } else {
+            spUtil.addErrorMessage("Could not parse fields for this record.");
+        }
+    }).catch(function() {
+        spUtil.addErrorMessage("An unexpected server communication error occurred.");
+    }).finally(function() {
+        c.loadingPreview = false;
+    });
+  };
+
+  c.closeModal = function() {
+    c.showPreviewModal = false;
+    c.loadingPreview = false;
+    c.previewFields = [];
+  };
+
+  c.buildGroups = function() {
+    var tableMap = {};
+    ($rootScope.tnQueue || []).forEach(function(item) {
+      if (!tableMap[item.tableName]) {
+        tableMap[item.tableName] = { 
+          tableName: item.tableName, 
+          records: [],
+          currentPage: 1
+        };
+      }
+      tableMap[item.tableName].records.push(item);
+    });
+    c.data.groups = Object.keys(tableMap).map(function(k) { return tableMap[k]; });
+    c.data.totalRecords = $rootScope.tnQueue.length;
+    c.data.totalTables  = c.data.groups.length;
+  };
+
+  // ── Listen: records added from Browse Records widget ─────────────────────
+  $rootScope.$on('tracenow.add_to_queue', function(event, payload) {
+    
+    // Check the server for a connection change before adding new records
+    c.server.update().then(function() {
+        
+        // If connection changed (e.g., Disconnected), wipe the old queue first!
+        if ($rootScope.tnLastIsRemote !== c.data.isRemote) {
+            $rootScope.tnQueue = [];
+            $rootScope.tnLastIsRemote = c.data.isRemote;
+            if (window.spUtil) spUtil.addInfoMessage("Environment changed: Old queue cleared to prevent data mixing.");
+        }
+
+        payload.records.forEach(function(rec) {
+          var exists = $rootScope.tnQueue.some(function(q) {
+            return q.sys_id === rec.sys_id;
+          });
+          if (!exists) {
+            $rootScope.tnQueue.push({
+              sys_id:            rec.sys_id,
+              number:            rec.number,
+              short_description: rec.state || '',
+              tableName:         payload.table,
+              tableLabel:        payload.label
+            });
+          }
+        });
+        
+        c.buildGroups();
+        $rootScope.$broadcast('tracenow.queue_updated');
+    });
+  });
+
+  // ── Listen: navigate to queue tab ────────────────────────────────────────
+  $scope.$on('tracenow.view_changed', function(event, targetTab) {
+    if (targetTab === 'queue') {
+      c.showView = true;
+      
+      // Update data and check if connection changed while we were away
+      c.server.update().then(function() {
+          if ($rootScope.tnLastIsRemote !== c.data.isRemote) {
+              $rootScope.tnQueue = [];
+              $rootScope.tnLastIsRemote = c.data.isRemote;
+              $rootScope.$broadcast('tracenow.queue_updated');
+              if (window.spUtil) spUtil.addInfoMessage("Environment changed: Queue cleared.");
+          }
+          c.buildGroups();
+      });
+      
+    } else {
+      c.showView = false;
+    }
+  });
+
+  c.removeRecord = function(sysId) {
+    $rootScope.tnQueue = $rootScope.tnQueue.filter(function(q) {
+      return q.sys_id !== sysId;
+    });
+    c.buildGroups();
+    $rootScope.$broadcast('tracenow.queue_updated');
+  };
+
+  c.clearQueue = function() {
+    if (confirm("Are you sure you want to clear all records from your current queue?")) {
+      $rootScope.tnQueue = [];
+      c.buildGroups();
+      $rootScope.$broadcast('tracenow.queue_updated');
+    }
+  };
+
+  c.exportQueueXML = function() {
+    if (c.data.totalRecords === 0) return;
+
+    if (!confirm('Generate XML payload for ' + c.data.totalRecords + ' record(s) from ' + c.data.totalTables + ' table(s)?\n\nThis will process the data in the background and appear in your Dashboard.')) return;
+
+    c.exporting = true;
+
+    c.server.get({
+        action: 'export_queue_xml',
+        groups: c.data.groups
+    }).then(function(response) {
+        c.exporting = false;
+        
+        if (response.data.exportSuccess) {
+            $rootScope.tnQueue = [];
+            c.buildGroups();
+            $rootScope.$broadcast('tracenow.queue_updated');
+            $rootScope.$broadcast('tracenow.needs_update');
+            spUtil.addInfoMessage('✅ ' + response.data.jobsCreated + ' Export Job(s) queued. Check the Dashboard for real-time progress.');
+        } else {
+            spUtil.addErrorMessage('❌ Export failed to start.');
+        }
+    }).catch(function() {
+        c.exporting = false;
+        spUtil.addErrorMessage('❌ Server error during export.');
+    });
+  };
+
+  c.startMigration = function() {
+    if (c.data.totalRecords === 0) return;
+
+    if (!confirm('Migrate ' + c.data.totalRecords + ' record(s) from ' + c.data.totalTables + ' table(s)?\n\nThis will call the migration engine on the target instance.')) return;
+
+    c.migrating = true;
+
+    c.server.get({
+        action: 'run_migration',
+        groups: c.data.groups   
+    }).then(function(response) {
+        c.migrating = false;
+
+        if (window.spUtil && spUtil.clearMessages) spUtil.clearMessages();
+
+        if (response.data.migrationSuccess) {
+            var s = response.data.migrationSummary;
+            var tableBreakdown = '';
+            if (s.byTable) {
+                for (var t in s.byTable) {
+                    tableBreakdown += '\n  • ' + t + ': ' + s.byTable[t].ok + ' ok, ' + s.byTable[t].fail + ' failed';
+                }
+            }
+            
+            $rootScope.tnQueue = [];
+            c.buildGroups();
+            $rootScope.$broadcast('tracenow.queue_updated');
+            $rootScope.$broadcast('tracenow.needs_update');
+
+            alert('✅ Migration complete!\n\n' + s.success + '/' + s.total + ' records succeeded\n' + 'Duration: ' + s.durationText + '\n' + 'Avg per record: ' + s.avgPerRecord + tableBreakdown + '\n\n' + 'Full details logged in Migration History.');
+
+        } else if (response.data.migrationSummary && response.data.migrationSummary.failed > 0) {
+            var s2 = response.data.migrationSummary;
+            if (confirm('⚠️ Partial migration:\n' + s2.success + ' succeeded, ' + s2.failed + ' failed\n' + 'Duration: ' + s2.durationText + '\n\n' + 'Clear successfully migrated records from queue?\n' + '(Failed records will remain)')) {
+                $rootScope.tnQueue = [];
+                c.buildGroups();
+                $rootScope.$broadcast('tracenow.queue_updated');
+                $rootScope.$broadcast('tracenow.needs_update');
+            }
+        } else {
+            alert('❌ Migration failed: ' + response.data.migrationError);
+        }
+    });
+  };
+
+  c.nextPage = function(group) {
+    var maxPages = c.numberOfPages(group.records.length, 10);
+    if (group.currentPage < maxPages) group.currentPage++;
+  };
+
+  c.prevPage = function(group) {
+    if (group.currentPage > 1) group.currentPage--;
+  };
+
+  c.buildGroups();
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>/* ── Wrapper ── */
+.migration-queue-wrapper {
+  padding: 32px 36px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1e293b;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── Header ── */
+.mq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+.mq-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+.mq-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Clear Queue Button ── */
+.mq-btn-clear {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #e11d48;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+.mq-btn-clear:hover { background: #ffe4e6; }
+.mq-btn-clear:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Metric Cards ── */
+.mq-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.mq-metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 28px 20px;
+  text-align: center;
+}
+.mq-metric-number {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.mq-blue  { color: #2563eb; }
+.mq-dark  { color: #0f172a; }
+.mq-metric-label {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ── Ready to Migrate Banner ── */
+.mq-ready-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+  gap: 16px;
+}
+.mq-ready-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.mq-ready-text {
+  font-size: 14px;
+  color: #475569;
+}
+.mq-ready-text strong { color: #0f172a; }
+
+/* ── Start Migration Button ── */
+.mq-btn-start {
+  background: #ffffff;
+  border: 2px solid #2563eb;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 24px;
+  border-radius: 30px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.mq-btn-start:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+.mq-btn-start:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Group Card ── */
+.mq-group-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+/* ── Group Header ── */
+.mq-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.mq-group-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.mq-group-badge {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.4px;
+}
+.mq-badge-empty { background: #94a3b8 !important; }
+
+/* ── Record Row ── */
+.mq-record-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+}
+.mq-record-row:last-child { border-bottom: none; }
+.mq-record-row:hover { background: #f8fafc; }
+
+.mq-record-info { flex: 1; min-width: 0; }
+.mq-record-number {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2563eb;
+  margin-bottom: 3px;
+}
+.mq-record-desc {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ── Record Action Icons ── */
+.mq-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+.mq-icon-view {
+  color: #94a3b8;
+  font-size: 16px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.mq-icon-view:hover { color: #2563eb; }
+.mq-icon-delete {
+  color: #fca5a5;
+  font-size: 16px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.mq-icon-delete:hover { color: #e11d48; }
+
+/* ── Empty State ── */
+.mq-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+.mq-empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  display: block;
+}
+.mq-empty-state p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+/* Centered Pagination Wrapper Layout */
+.tn-pagination-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  padding: 12px 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* "Showing X to Y of Z records" text style */
+.tn-pagination-info {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 400;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+/* Control Row Container */
+.tn-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Square Navigation Control Action Buttons */
+.tn-page-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease;
+}
+
+.tn-page-btn i {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tn-page-btn:hover:not([disabled]) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.tn-page-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+/* "Page X of Y" Label Text */
+.tn-page-current {
+  font-size: 14px;
+  font-weight: 400;
+  color: #1e293b;
+  padding: 0 4px;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow_migration_queue</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>TraceNow Migration Queue</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    var historyTable = 'x_1862238_tracenow_migration_history';
+
+    data.groups           = [];
+    data.totalRecords     = 0;
+    data.totalTables      = 0;
+    data.migrationSuccess = false;
+    data.migrationError   = '';
+    data.migrationSummary = null;
+    data.exportSuccess    = false;
+    data.jobsCreated      = 0;
+
+    // ── DETERMINE ACTIVE CONNECTION ───────────────────────────────
+    data.activeInstance = null;
+    data.isRemote = false;
+
+    var preloadConn = new GlideRecord('x_1862238_tracenow_connections');
+    preloadConn.addQuery('status', 'Active');
+    preloadConn.query();
+
+    if (preloadConn.next()) {
+        data.isRemote = true;
+        var preUrl = preloadConn.getValue('source_instance_url') || '';
+        if (preUrl.endsWith('/')) preUrl = preUrl.substring(0, preUrl.length - 1);
+        data.activeInstance = { url: String(preUrl) };
+    } else {
+        data.isRemote = false;
+        data.activeInstance = { url: gs.getProperty('glide.servlet.uri', '') };
+    }
+
+    var action = input ? input.action : 'fetch_queue';
+
+   // ── EXPORT QUEUE XML (LOCAL LOGIC) ────────────────────────────
+    if (input && action === 'export_queue_xml' && input.groups) {
+        
+        var allItems = [];
+        var allNumbers = [];
+        var tableSet = {};
+
+        // 1. Gather EVERY record from every group into one massive list
+        for (var g = 0; g < input.groups.length; g++) {
+            var grp = input.groups[g];
+            tableSet[grp.tableName] = true;
+            
+            for (var r = 0; r < grp.records.length; r++) {
+                allItems.push({
+                    table: grp.tableName,
+                    sys_id: grp.records[r].sys_id
+                });
+                allNumbers.push(grp.records[r].number || grp.records[r].sys_id);
+            }
+        }
+
+        if (allItems.length === 0) return;
+
+        var tableNames = Object.keys(tableSet).join(', ');
+        var numStr = allNumbers.join(', ');
+
+        // Clean up the UI display if they are exporting a massive amount of records
+        if (numStr.length > 100) numStr = numStr.substring(0, 97) + '...';
+        if (tableNames.length > 40) tableNames = 'Multiple Tables (' + Object.keys(tableSet).length + ')';
+
+        // 2. Create ONE unified Tracker Record for the Dashboard
+        var jobGr = new GlideRecord('x_1862238_tracenow_export_job');
+        jobGr.initialize();
+        jobGr.setValue('table_name', tableNames);
+        jobGr.setValue('record_number', numStr);
+        jobGr.setValue('status', 'Processing');
+        jobGr.setValue('percent_complete', 0);
+        var jobSysId = jobGr.insert();
+
+        // 3. Fire a SINGLE Background Engine Worker
+        var itemsJsonStr = JSON.stringify(allItems);
+
+        var worker = new GlideScriptedHierarchicalWorker();
+        worker.setProgressName("Export Mixed XML");
+        worker.setScriptIncludeName("x_1862238_tracenow.dm_export");
+        worker.setScriptIncludeMethod("exportMixedToAttachment"); 
+        worker.putMethodArg("itemsJsonStr", itemsJsonStr); // Pass the entire array at once
+        worker.putMethodArg("exportJobSysId", jobSysId);
+        worker.setBackground(true);
+        worker.start();
+
+        data.exportSuccess = true;
+        data.jobsCreated = 1; 
+        return;
+    }
+
+    // ── SINGLE RECORD PREVIEW ─────────────────────────────────────
+    if (input && action === 'get_single_record_details') {
+        data.singleRecord = [];
+        var targetTable = input.table;
+        var targetSysId = input.sys_id;
+
+        if (targetTable && targetSysId) {
+            if (data.isRemote) {
+                var detailGR = new GlideRecord('x_1862238_tracenow_connections');
+                detailGR.addQuery('status', 'Active');
+                detailGR.query();
+
+                if (detailGR.next()) {
+                    try {
+                        var detailUser = detailGR.getValue('username');
+                        var detailPass = detailGR.password.getDecryptedValue() || detailGR.getValue('password');
+                        var endpoint = data.activeInstance.url + "/api/now/table/" + targetTable + "/" + targetSysId + "?sysparm_display_value=true";
+                        var request = new sn_ws.RESTMessageV2();
+                        request.setEndpoint(endpoint);
+                        request.setHttpMethod('GET');
+                        if (detailUser && detailPass) request.setBasicAuth(detailUser, detailPass);
+                        var response = request.execute();
+
+                        if (response.getStatusCode() == 200) {
+                            var body = JSON.parse(response.getBody());
+                            if (body.result) {
+                                var rawObj = body.result;
+                                var targetFields = ['number', 'short_description', 'sys_id', 'state', 'priority', 'assignment_group', 'assigned_to', 'sys_updated_by', 'sys_updated_on'];
+                                for (var f = 0; f < targetFields.length; f++) {
+                                    var fieldName = targetFields[f];
+                                    if (rawObj.hasOwnProperty(fieldName)) {
+                                        var displayValue = (rawObj[fieldName] && typeof rawObj[fieldName] === 'object') ? rawObj[fieldName].display_value : rawObj[fieldName];
+                                        data.singleRecord.push({
+                                            label: fieldName.replace(/_/g, ' '),
+                                            value: displayValue ? String(displayValue) : '---'
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        gs.error('TraceNow Record Details REST Error: ' + e.message);
+                    }
+                }
+            } else {
+                var localRecGR = new GlideRecord(targetTable);
+                if (localRecGR.get(targetSysId)) {
+                    var localFields = ['number', 'short_description', 'sys_id', 'state', 'priority', 'assignment_group', 'assigned_to', 'sys_updated_by', 'sys_updated_on'];
+                    for (var i = 0; i < localFields.length; i++) {
+                        var field = localFields[i];
+                        if (localRecGR.isValidField(field)) {
+                            data.singleRecord.push({
+                                label: field.replace(/_/g, ' '),
+                                value: localRecGR.getDisplayValue(field) || '---'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // ── MIGRATE NOW (REMOTE LOGIC) ──────────────────────────────────────────
+    if (input && action === 'run_migration' && input.groups) {
+        if (!data.isRemote) {
+            data.migrationSuccess = false;
+            data.migrationError = "You cannot migrate records from the local instance.";
+            return;
+        }
+
+        try {
+            var connGR = new GlideRecord('x_1862238_tracenow_connections');
+            connGR.addQuery('status', 'Active');
+            connGR.query();
+
+            if (!connGR.next()) {
+                data.migrationSuccess = false;
+                data.migrationError   = 'No active connection found.';
+                return;
+            }
+
+            var connSysId = connGR.getUniqueValue(); 
+            var sourceUrl = connGR.getValue('source_instance_url');
+            var username  = connGR.getValue('username');
+            var password  = connGR.password.getDecryptedValue() || connGR.getValue('password');
+
+            if (sourceUrl.endsWith('/')) sourceUrl = sourceUrl.slice(0, -1);
+
+            var items = [];
+            for (var m = 0; m < input.groups.length; m++) {
+                var group = input.groups[m];
+                for (var j = 0; j < group.records.length; j++) {
+                    var rec = group.records[j];
+                    items.push({
+                        table: group.tableName,
+                        sysId: rec.sys_id,     
+                        number: rec.number     
+                    });
+                }
+            }
+
+            if (items.length === 0) {
+                data.migrationSuccess = false;
+                data.migrationError   = 'No valid records to migrate.';
+                return;
+            }
+
+            var dm = new x_1862238_tracenow.dm_test();
+            var options = { sortByTable: true, stopOnError: false };
+            var summary = dm.migrateMixedRecords(sourceUrl, username, password, items, options);
+
+            if (gs.tableExists(historyTable)) {
+                for (var k = 0; k < summary.results.length; k++) {
+                    var result = summary.results[k];
+                    try {
+                        var matchedNumber = '';
+                        for (var n = 0; n < items.length; n++) {
+                            if (items[n].sysId === result.sourceId) {
+                                matchedNumber = items[n].number;
+                                break;
+                            }
+                        }
+                        
+                        var recordDisplay = matchedNumber || result.sourceId || 'Unknown';
+                        var tableName = result.table || '';
+
+                        var histGR = new GlideRecord(historyTable);
+                        histGR.addQuery('record_number', recordDisplay);
+                        histGR.addQuery('table_name', tableName);
+                        histGR.addQuery('connection', connSysId); 
+                        histGR.query();
+
+                        if (histGR.next()) {
+                            histGR.setValue('status',        result.success ? 'Success' : 'Failed');
+                            histGR.setValue('error_message', result.error     || '');
+                            histGR.setValue('migrated_by',   gs.getUserID()); 
+                            histGR.update();
+                        } else {
+                            histGR.initialize();
+                            histGR.setValue('record_number', recordDisplay);
+                            histGR.setValue('table_name',    tableName);
+                            histGR.setValue('status',        result.success ? 'Success' : 'Failed');
+                            histGR.setValue('error_message', result.error     || '');
+                            histGR.setValue('migrated_by',   gs.getUserID()); 
+                            histGR.setValue('connection',    connSysId); 
+                            histGR.insert();
+                        }
+                    } catch (eHist) {
+                        gs.warn('History log failed for ' + result.sourceId + ': ' + eHist);
+                    }
+                }
+            }
+
+            data.migrationSuccess = (summary.failed === 0);
+            data.migrationSummary = {
+                total:        summary.total,
+                success:      summary.success,
+                failed:       summary.failed,
+                durationText: summary.durationText,
+                avgPerRecord: summary.avgPerRecord,
+                byTable:      summary.byTable
+            };
+
+        } catch (ex) {
+            data.migrationSuccess = false;
+            data.migrationError   = ex.message || String(ex);
+        }
+    }
+
+    data.groups       = [];
+    data.totalRecords = 0;
+    data.totalTables  = 0;
+
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 16:42:03</sys_created_on>
+        <sys_id>525fdff4c31d831093c8b71d0501319e</sys_id>
+        <sys_mod_count>25</sys_mod_count>
+        <sys_name>TraceNow Migration Queue</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_525fdff4c31d831093c8b71d0501319e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-16 11:58:13</sys_updated_on>
+        <template><![CDATA[<div class="migration-queue-wrapper" ng-if="c.showView">
+
+  <div class="mq-header">
+    <div>
+      <h1 class="mq-title">Migration Queue</h1>
+      <p class="mq-subtitle">Review and configure your migration selection</p>
+    </div>
+    <button class="mq-btn-clear" ng-click="c.clearQueue()" ng-disabled="c.data.totalRecords === 0">
+      <i class="fa fa-trash"></i> Clear Queue
+    </button>
+  </div>
+
+  <div class="mq-metrics">
+    <div class="mq-metric-card">
+      <div class="mq-metric-number mq-blue">{{c.data.totalRecords}}</div>
+      <div class="mq-metric-label">Record(s)</div>
+    </div>
+    <div class="mq-metric-card">
+      <div class="mq-metric-number mq-dark">{{c.data.totalTables}}</div>
+      <div class="mq-metric-label">Table(s)</div>
+    </div>
+  </div>
+
+  <div class="mq-ready-banner" ng-if="c.data.isRemote">
+    <div>
+        <div class="mq-ready-title">Ready to Migrate</div>
+        <div class="mq-ready-text">
+            You are about to migrate
+            <strong>{{c.data.totalRecords}} record(s)</strong>
+            from
+            <strong>{{c.data.totalTables}} table(s)</strong>.
+        </div>
+    </div>
+    <button class="mq-btn-start" ng-click="c.startMigration()" ng-disabled="c.data.totalRecords === 0 || c.migrating">
+        <i class="fa" ng-class="c.migrating ? 'fa-spinner fa-spin' : 'fa-play-circle'"></i>
+        {{c.migrating ? 'Migrating...' : 'Start Migration'}}
+    </button>
+  </div>
+
+  <div class="mq-ready-banner" ng-if="!c.data.isRemote" style="background: #f0fdf4; border-color: #bbf7d0;">
+    <div>
+        <div class="mq-ready-title" style="color: #166534;">Ready to Export XML</div>
+        <div class="mq-ready-text">
+            You are about to generate XML payloads for
+            <strong>{{c.data.totalRecords}} record(s)</strong>
+            from
+            <strong>{{c.data.totalTables}} table(s)</strong>.
+        </div>
+    </div>
+    <button class="mq-btn-start" ng-click="c.exportQueueXML()" ng-disabled="c.data.totalRecords === 0 || c.exporting" style="border-color: #16a34a; color: #16a34a;">
+        <i class="fa" ng-class="c.exporting ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+        {{c.exporting ? 'Exporting...' : 'Export XML'}}
+    </button>
+  </div>
+
+  <div ng-if="c.data.totalRecords > 0">
+    <div class="mq-group-card" ng-repeat="group in c.data.groups">
+
+      <div class="mq-group-header">
+        <span class="mq-group-name">TABLE NAME: {{group.tableName | uppercase}}</span>
+        <span class="mq-group-badge">{{group.records.length}} RECORD(S)</span>
+      </div>
+
+      <div class="mq-record-row" ng-repeat="record in group.records | limitTo: 10 : (group.currentPage - 1) * 10">
+        <div class="mq-record-info">
+          <div class="mq-record-number">{{record.number}}</div>
+          <div class="mq-record-desc">{{record.short_description || '(No Description)'}}</div>
+        </div>
+        <div class="mq-record-actions">
+          <a href="javascript:void(0)" class="mq-icon-view" title="Preview" ng-click="c.viewQueueRecord(record, group.tableName)">
+            <i class="fa fa-eye"></i>
+          </a>
+          <a href="javascript:void(0)" class="mq-icon-delete" title="Remove" ng-click="c.removeRecord(record.sys_id)">
+            <i class="fa fa-trash-o"></i>
+          </a>
+        </div>
+      </div>
+
+     <div class="tn-pagination-bar" ng-if="group.records.length > 10">
+        <div class="tn-pagination-info">
+          Showing {{ (group.currentPage - 1) * 10 + 1 }} to {{ c.min(group.currentPage * 10, group.records.length) }} of {{ group.records.length }} records
+        </div>
+        <div class="tn-pagination-controls">
+          <button class="tn-page-btn" ng-disabled="group.currentPage === 1" ng-click="c.prevPage(group)">
+            <i class="fa fa-chevron-left"></i>
+          </button>
+          <span class="tn-page-current">Page {{ group.currentPage }} of {{ c.numberOfPages(group.records.length, 10) }}</span>
+          <button class="tn-page-btn" ng-disabled="group.currentPage >= c.numberOfPages(group.records.length, 10)" ng-click="c.nextPage(group)">
+            <i class="fa fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop fade in" ng-if="c.showPreviewModal" style="z-index:1040;"></div>
+
+  <div class="modal data-preview-modal" ng-class="{'show-block': c.showPreviewModal}" ng-if="c.showPreviewModal" role="dialog" style="z-index:1050;display:block;overflow-y:auto;">
+    <div class="modal-dialog modal-lg" style="margin:8% auto;">
+      <div class="modal-content panel panel-default" style="border-radius:6px; box-shadow:0 12px 30px rgba(0,0,0,0.25); border:none;">
+        <div class="panel-heading modal-header-prime" style="background:#fff; border-bottom:1px solid #e9e9e9; padding:20px 24px; display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="panel-title" style="font-size:18px; font-weight:700; color:#1f2937; margin:0;">
+            <i class="fa fa-file-text-o text-primary" style="margin-right:10px;"></i>
+            Remote Record View — <span class="text-primary">{{c.previewNumber}}</span>
+          </h3>
+          <button type="button" class="close" ng-click="c.closeModal()" style="font-size:24px; opacity:.4;">&times;</button>
+        </div>
+
+        <div class="panel-body" style="padding:24px; background:#fafbfc; min-height:200px;">
+          <div ng-if="c.loadingPreview" class="text-center" style="padding:60px 0;">
+            <i class="fa fa-circle-o-notch fa-spin fa-3x fa-fw text-primary"></i>
+            <p style="margin-top:15px;">Fetching live backend properties secure data pipeline...</p>
+          </div>
+
+          <div ng-if="!c.loadingPreview && c.previewFields.length > 0" class="row">
+            <div class="col-xs-12 col-sm-6" ng-repeat="field in c.previewFields" style="margin-bottom:18px;">
+              <label style="font-size:12px; font-weight:700; text-transform:uppercase; color:#4b5563; display:block; margin-bottom:6px;">{{field.label}}</label>
+              <input type="text" class="form-control" ng-value="field.value || '---'" readonly style="background:#fff; border:1px solid #d1d5db; border-radius:6px; height:40px; font-weight:500;">
+            </div>
+          </div>
+
+          <div ng-if="!c.loadingPreview && (!c.previewFields || c.previewFields.length===0)" class="text-center" style="padding:40px 10px;">
+            <i class="fa fa-exclamation-triangle text-warning" style="font-size:32px;"></i>
+            <p style="margin-top:10px;">No matching viewable record properties returned from remote endpoint.</p>
+          </div>
+        </div>
+
+        <div class="panel-footer" style="background:#fff; border-top:1px solid #e9e9e9; padding:16px 24px; text-align:right;">
+          <button class="btn btn-default" ng-click="c.closeModal()">Close View</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.show-block{ display:block !important; }
+.text-read:focus{ border-color:#d1d5db !important; box-shadow:none !important; outline:none !important; }
+.modal-header-prime .close:hover{ opacity:.8 !important; }
+</style>]]></template>
+    </sp_widget>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>525fdff4c31d831093c8b71d0501319e</id>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-03 16:42:03</sys_created_on>
+        <sys_id>925fd338c31d831093c8b71d050131f5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-03 16:42:03</sys_updated_on>
+        <table>sp_widget</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
+</record_update>

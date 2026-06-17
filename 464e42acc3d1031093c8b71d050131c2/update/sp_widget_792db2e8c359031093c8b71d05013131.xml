@@ -1,0 +1,727 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($rootScope, $scope, spUtil, $interval) {
+    var c = this;
+
+    c.data.exportFiles = c.data.exportFiles || [];
+    c.data.historyRecords = c.data.historyRecords || [];
+
+    c.activeTab = 'migration'; 
+    c.switchTab = function(tabName) {
+        c.activeTab = tabName;
+    };
+
+    $rootScope.$on('tracenow.needs_update', function() {
+        c.server.update(); 
+    });
+
+    $scope.$on('tracenow.queue_updated', function() {
+        c.data.queueCount = $rootScope.tnQueue ? $rootScope.tnQueue.length : 0;
+    });
+
+    c.isRefreshingExports = false;
+    c.refreshExports = function() {
+        c.isRefreshingExports = true;
+        c.server.get({ action: 'poll_exports' }).then(function(response) {
+            if (response && response.data && response.data.exportFiles) {
+                c.data.exportFiles = response.data.exportFiles;
+            }
+            setTimeout(function() {
+                c.isRefreshingExports = false;
+                $scope.$apply(); 
+            }, 400); 
+        });
+    };
+
+    var pollingPromise;
+    c.startPolling = function() {
+        if (angular.isDefined(pollingPromise)) return; 
+        
+        pollingPromise = $interval(function() {
+            if (!c.data.exportFiles) return; 
+            
+            var isProcessing = c.data.exportFiles.some(function(file) {
+                return file && file.status && file.status.toLowerCase() === 'processing';
+            });
+
+            if (isProcessing) {
+                c.server.get({ action: 'poll_exports' }).then(function(response) {
+                    if (response && response.data && response.data.exportFiles) {
+                        c.data.exportFiles = response.data.exportFiles;
+                    }
+                });
+            } else {
+                c.stopPolling(); 
+            }
+        }, 1500); 
+    };
+
+    c.stopPolling = function() {
+        if (angular.isDefined(pollingPromise)) {
+            $interval.cancel(pollingPromise);
+            pollingPromise = undefined;
+        }
+    };
+
+    $scope.$watch('c.data.exportFiles', function(newVal) {
+        if (!newVal || !Array.isArray(newVal)) return; 
+        var isProcessing = newVal.some(function(file) {
+            return file && file.status && file.status.toLowerCase() === 'processing';
+        });
+        if (isProcessing) c.startPolling();
+    }, true);
+
+    $scope.$on('$destroy', function() { c.stopPolling(); });
+
+    c.cancelExport = function(jobId) {
+        if (!confirm("Are you sure you want to cancel this export?")) return;
+        c.server.get({ action: 'cancel_export', jobId: jobId }).then(function() {
+            if (window.spUtil) spUtil.addInfoMessage("Export cancelled.");
+            c.server.update(); 
+        });
+    };
+
+    c.fetchingPage = false;
+    c.changePage = function(newPage) {
+        if (newPage < 1 || newPage > c.data.totalPages) return;
+        c.fetchingPage = true;
+        c.server.get({ action: 'fetch_history_page', page: newPage }).then(function(response) {
+            if (response && response.data) {
+                c.data.historyRecords = response.data.historyRecords || [];
+                c.data.currentPage = response.data.currentPage;
+                c.data.startIndex = response.data.startIndex;
+                c.data.endIndex = response.data.endIndex;
+            }
+            c.fetchingPage = false;
+        });
+    };
+
+    c.importing = false;
+    c.triggerImport = function() { document.getElementById('tracenow_dashboard_importer').click(); };
+    $scope.handleFileSelect = function(event) {
+        var file = event.target.files[0];
+        if (!file) return;
+        
+        if (file.name.indexOf('.xml') === -1) {
+            if (window.spUtil) spUtil.addErrorMessage("Please select a valid .xml file.");
+            return;
+        }
+        
+        c.importing = true;
+        $scope.$apply(); 
+        
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            c.server.get({ action: 'import_xml', xmlPayload: e.target.result }).then(function(response) {
+                c.importing = false;
+                if (window.spUtil && spUtil.clearMessages) spUtil.clearMessages();
+                
+                if (response && response.data && response.data.importError) {
+                    alert("❌ Import Failed:\n" + response.data.importError);
+                } else if (response && response.data) {
+                    alert("✅ Successfully imported " + response.data.importCount + " records."); 
+                    c.server.update(); 
+                }
+                document.getElementById('tracenow_dashboard_importer').value = '';
+            }).catch(function() {
+                c.importing = false;
+                document.getElementById('tracenow_dashboard_importer').value = '';
+            });
+        };
+        reader.readAsText(file);
+    };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.tn-dashboard {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Hero Section */
+.tn-hero {
+  background-color: #dbeafe;
+  border-radius: 12px;
+  padding: 40px;
+  margin-bottom: 24px;
+}
+
+.tn-badge {
+  display: inline-block;
+  background-color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.tn-star { color: #eab308; margin-right: 6px; }
+
+.tn-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+
+.tn-desc {
+  font-size: 15px;
+  color: #475569;
+  max-width: 650px;
+  line-height: 1.5;
+  margin: 0 0 24px 0;
+}
+
+.tn-btn-primary {
+  background-color: #1d4ed8;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tn-btn-primary:hover { background-color: #1e40af; }
+
+/* Stats Container */
+.tn-stats-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.tn-stat-card {
+  flex: 1;
+  min-width: 200px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.tn-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tn-stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.tn-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* Specific Icon Colors */
+.tn-icon-blue { background: #e0f2fe; color: #0284c7; }
+.tn-icon-green { background: #dcfce7; color: #16a34a; }
+.tn-icon-purple { background: #f3e8ff; color: #9333ea; }
+.tn-icon-orange { background: #ffedd5; color: #ea580c; }
+
+.tn-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.tn-stat-subtext {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Tab System */
+.tn-tabs-container {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+}
+
+.tn-tab {
+  padding: 16px 24px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  color: #64748b;
+  border-bottom: 2px solid transparent;
+}
+
+.tn-tab.active {
+  color: #0f172a;
+  background: #ffffff;
+  border-bottom: 2px solid #6366f1;
+}
+
+.tn-tab:hover:not(.active) {
+  color: #334155;
+  background-color: #f1f5f9;
+}
+
+/* Custom UI Elements (Buttons &amp; Progress) */
+.tn-btn-download {
+  background: #10b981;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-block;
+  transition: background 0.2s;
+}
+
+.tn-btn-download:hover { background: #059669; color: white; text-decoration: none; }
+
+.tn-progress-bg {
+  margin-top: 6px;
+  width: 100%;
+  background-color: #e2e8f0;
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.tn-progress-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.4s ease;
+}</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>true</has_preview>
+        <id>tracenow-dashboard</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>TraceNow Dashboard Widget</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    data.exportFiles = [];
+    data.historyRecords = [];
+    data.queueCount = 0;
+    data.migratedCount = 0;
+    data.recentRuns = 0;
+    data.successRate = 0;
+
+    // --- 1. SMART POLLING ---
+    if (input && input.action === 'poll_exports') {
+        var grPoll = new GlideRecordSecure('x_1862238_tracenow_export_job');
+        grPoll.orderByDesc('sys_created_on');
+        grPoll.setLimit(10);
+        grPoll.query();
+
+        var nowMsPoll = new GlideDateTime().getNumericValue();
+
+        while(grPoll.next()) {
+            var pAttGr = new GlideRecord('sys_attachment');
+            pAttGr.addQuery('table_sys_id', grPoll.getUniqueValue());
+            pAttGr.query();
+            var pAttId = '';
+            if (pAttGr.next()) pAttId = pAttGr.getUniqueValue();
+
+            // Status check reads both standard fields
+            var pStatus = grPoll.getValue('status') || grPoll.getValue('state') || 'Pending';
+            var pPct = parseInt(grPoll.getValue('percent_complete') || 0, 10);
+            
+            var pEtaText = "";
+            if (pStatus.toLowerCase() === 'processing') {
+                var pCreatedStr = grPoll.getValue('sys_created_on');
+                if (pCreatedStr) {
+                    var pCreatedMs = new GlideDateTime(pCreatedStr).getNumericValue();
+                    if (pPct > 0 && pPct < 100) {
+                        var elapsedMs = nowMsPoll - pCreatedMs;
+                        if (elapsedMs < 0) elapsedMs = 1000;
+                        var totalEstMs = (elapsedMs / pPct) * 100;
+                        var remainMs = totalEstMs - elapsedMs;
+                        var remainSec = Math.round(remainMs / 1000);
+                        pEtaText = remainSec > 60 ? "~" + Math.ceil(remainSec / 60) + "m remaining" : "~" + Math.max(1, remainSec) + "s remaining";
+                    } else {
+                        pEtaText = "Estimating...";
+                    }
+                }
+            }
+
+            data.exportFiles.push({
+                sys_id: grPoll.getUniqueValue(),
+                record_number: grPoll.getValue('record_number') || '-',
+                table: grPoll.getValue('table_name') || '-',
+                status: pStatus,
+                percent: pPct,
+                created_on: grPoll.getValue('sys_created_on'),
+                eta_text: pEtaText,
+                attachment_id: pAttId
+            });
+        }
+        return; 
+    }
+
+    // --- 2. CANCEL EXPORT ---
+    if (input && input.action === 'cancel_export' && input.jobId) {
+        var cancelGr = new GlideRecord('x_1862238_tracenow_export_job');
+        if (cancelGr.get(input.jobId)) {
+            cancelGr.setValue('status', 'Cancelled');
+            cancelGr.update();
+        }
+    }
+
+    // --- 3. IMPORT XML ---
+    if (input && input.action === 'import_xml') {
+        try {
+            var importer = new x_1862238_tracenow.dm_import();
+            var results = importer.processXML(input.xmlPayload);
+            data.importError = results.error;
+            data.importCount = results.count;
+        } catch (e) {
+            data.importError = "Import engine failure. Check system logs.";
+        }
+        return; 
+    }
+
+    // --- 4. MIGRATION HISTORY ---
+    var pageIndex = (input && input.page) ? parseInt(input.page, 10) : 1;
+    var recordsPerPage = 10;
+    var offsetStart = (pageIndex - 1) * recordsPerPage;
+    var offsetEnd = offsetStart + recordsPerPage;
+
+    var grCount = new GlideAggregate('x_1862238_tracenow_migration_history');
+    grCount.addAggregate('COUNT');
+    grCount.query();
+    var totalRows = 0;
+    if (grCount.next()) totalRows = parseInt(grCount.getAggregate('COUNT'), 10);
+    
+    data.totalRecords = totalRows;
+    data.totalPages = Math.ceil(totalRows / recordsPerPage) || 1;
+    data.currentPage = pageIndex;
+
+    var grHistoryList = new GlideRecordSecure('x_1862238_tracenow_migration_history');
+    grHistoryList.orderByDesc('sys_created_on');
+    grHistoryList.chooseWindow(offsetStart, offsetEnd);
+    grHistoryList.query();
+
+    while (grHistoryList.next()) {
+        data.historyRecords.push({
+            sys_id: grHistoryList.getUniqueValue(),
+            record_number: grHistoryList.getValue('record_number') || '-',
+            target_record_number: grHistoryList.getValue('target_record_number') || '-',
+            table: grHistoryList.getValue('table_name') || grHistoryList.getValue('table') || 'Migration Process',
+            status: grHistoryList.getValue('status') || grHistoryList.getValue('state') || 'Unknown',
+            created_on: grHistoryList.getValue('sys_created_on'),
+            user: grHistoryList.getValue('sys_created_by') || 'system'
+        });
+    }
+
+    data.startIndex = totalRows > 0 ? (offsetStart + 1) : 0;
+    data.endIndex = offsetStart + data.historyRecords.length;
+
+    if (input && input.action === 'fetch_history_page') return; 
+
+    // --- 5. STATS ---
+    var grQueue = new GlideRecord('x_1862238_tracenow_migration_queue');
+    if (grQueue.isValid()) {
+        grQueue.query();
+        data.queueCount = grQueue.getRowCount();
+    }
+
+    var successCount = 0;
+    var failedCount = 0;
+    var grHistoryStats = new GlideRecord('x_1862238_tracenow_migration_history');
+    if (grHistoryStats.isValid()) {
+        grHistoryStats.query();
+        while (grHistoryStats.next()) {
+            var statusVal = (grHistoryStats.getValue('status') || grHistoryStats.getValue('state') || '').toString().toLowerCase();
+            if (statusVal === 'success') successCount++;
+            else if (statusVal === 'failed') failedCount++;
+        }
+        data.migratedCount = successCount;
+        var totalProcessed = successCount + failedCount;
+        if (totalProcessed > 0) data.successRate = Math.round((successCount / totalProcessed) * 100);
+    }
+
+    var grRecent = new GlideRecord('x_1862238_tracenow_migration_history');
+    if (grRecent.isValid()) {
+        grRecent.addEncodedQuery('sys_created_onONLast 7 days@javascript:gs.beginningOfLast7Days()@javascript:gs.endOfLast7Days()');
+        grRecent.query();
+        data.recentRuns = grRecent.getRowCount();
+    }
+
+    // --- 6. INITIAL EXPORT LOAD ---
+    var grExpInit = new GlideRecordSecure('x_1862238_tracenow_export_job');
+    grExpInit.orderByDesc('sys_created_on');
+    grExpInit.setLimit(10);
+    grExpInit.query();
+
+    var nowMsInit = new GlideDateTime().getNumericValue();
+
+    while(grExpInit.next()) {
+        var attGrInit = new GlideRecord('sys_attachment');
+        attGrInit.addQuery('table_sys_id', grExpInit.getUniqueValue());
+        attGrInit.query();
+        var attIdInit = '';
+        if (attGrInit.next()) attIdInit = attGrInit.getUniqueValue();
+
+        // Status check reads both standard fields
+        var statusInit = grExpInit.getValue('status') || grExpInit.getValue('state') || 'Pending';
+        var pctInit = parseInt(grExpInit.getValue('percent_complete') || 0, 10);
+        
+        var etaTextInit = "";
+        if (statusInit.toLowerCase() === 'processing') {
+            var createdStrInit = grExpInit.getValue('sys_created_on');
+            if (createdStrInit) {
+                var createdMsInit = new GlideDateTime(createdStrInit).getNumericValue();
+                if (pctInit > 0 && pctInit < 100) {
+                    var elapsedMsInit = nowMsInit - createdMsInit;
+                    if (elapsedMsInit < 0) elapsedMsInit = 1000;
+                    var totalEstMsInit = (elapsedMsInit / pctInit) * 100;
+                    var remainMsInit = totalEstMsInit - elapsedMsInit;
+                    var remainSecInit = Math.round(remainMsInit / 1000);
+                    etaTextInit = remainSecInit > 60 ? "~" + Math.ceil(remainSecInit / 60) + "m remaining" : "~" + Math.max(1, remainSecInit) + "s remaining";
+                } else {
+                    etaTextInit = "Estimating...";
+                }
+            }
+        }
+
+        data.exportFiles.push({
+            sys_id: grExpInit.getUniqueValue(),
+            record_number: grExpInit.getValue('record_number') || '-',
+            table: grExpInit.getValue('table_name') || '-',
+            status: statusInit,
+            percent: pctInit,
+            created_on: grExpInit.getValue('sys_created_on'),
+            eta_text: etaTextInit,
+            attachment_id: attIdInit
+        });
+    }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-02 19:35:40</sys_created_on>
+        <sys_id>792db2e8c359031093c8b71d05013131</sys_id>
+        <sys_mod_count>31</sys_mod_count>
+        <sys_name>TraceNow Dashboard Widget</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sp_widget_792db2e8c359031093c8b71d05013131</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-16 11:13:25</sys_updated_on>
+        <template><![CDATA[<div class="tn-dashboard">
+  <div class="tn-hero">
+    <div class="tn-badge">
+      <span class="tn-star">★</span> ServiceNow Data Migration Platform
+    </div>
+    <h1 class="tn-title">Seamless Instance Synchronization</h1>
+    <p class="tn-desc">
+      Monitor your active payload queue, track historical transfers, and ensure high-fidelity data syncing across your environments in real-time.
+    </p>
+    
+    <div class="tn-hero-actions" style="margin-top: 24px;">
+      <button class="tn-btn-primary" style="display: inline-flex; align-items: center; gap: 8px;" ng-click="c.triggerImport()" ng-disabled="c.importing">
+        <i class="fa" ng-class="{'fa-spinner fa-spin': c.importing, 'fa-upload': !c.importing}"></i> 
+        {{ c.importing ? 'Importing XML Payload...' : 'Import XML Payload' }}
+      </button>
+      
+      <input type="file" id="tracenow_dashboard_importer" style="display:none;" accept=".xml" onchange="angular.element(this).scope().handleFileSelect(event)">
+    </div>
+  </div>
+
+  <div class="tn-stats-container">
+    <div class="tn-stat-card">
+      <div class="tn-stat-header">
+        <span class="tn-stat-label">Items in Queue</span>
+        <span class="tn-icon-wrapper tn-icon-blue"><i class="fa fa-shopping-cart"></i></span>
+      </div>
+      <div class="tn-stat-value">{{::c.data.queueCount}}</div>
+      <div class="tn-stat-subtext">Ready for transfer</div>
+    </div>
+
+    <div class="tn-stat-card">
+      <div class="tn-stat-header">
+        <span class="tn-stat-label">Total Migrated</span>
+        <span class="tn-icon-wrapper tn-icon-green"><i class="fa fa-file-text-o"></i></span>
+      </div>
+      <div class="tn-stat-value">{{::c.data.migratedCount}}</div>
+      <div class="tn-stat-subtext">Successfully transferred</div>
+    </div>
+
+    <div class="tn-stat-card">
+      <div class="tn-stat-header">
+        <span class="tn-stat-label">Recent Runs</span>
+        <span class="tn-icon-wrapper tn-icon-purple"><i class="fa fa-heartbeat"></i></span>
+      </div>
+      <div class="tn-stat-value">{{::c.data.recentRuns}}</div>
+      <div class="tn-stat-subtext">Last 7 days active</div>
+    </div>
+
+    <div class="tn-stat-card">
+      <div class="tn-stat-header">
+        <span class="tn-stat-label">Success Rate</span>
+        <span class="tn-icon-wrapper tn-icon-orange"><i class="fa fa-line-chart"></i></span>
+      </div>
+      <div class="tn-stat-value">{{::c.data.successRate}}%</div>
+      <div class="tn-stat-subtext">Average completion</div>
+    </div>
+  </div>
+
+  <div class="tn-stat-card" style="margin-top: 24px; padding: 0; overflow: hidden; display: block; clear: both;">
+    
+    <div class="tn-tabs-container">
+      <div class="tn-tab" ng-class="{'active': c.activeTab == 'migration'}" ng-click="c.switchTab('migration')">
+        <i class="fa fa-exchange" style="margin-right: 8px;"></i> Migration History Log
+      </div>
+      <div class="tn-tab" ng-class="{'active': c.activeTab == 'export'}" ng-click="c.switchTab('export')">
+        <i class="fa fa-folder-open-o" style="margin-right: 8px;"></i> Export Log
+      </div>
+    </div>
+    
+    <div ng-if="c.activeTab == 'migration'" class="tn-fade-in">
+      <div style="overflow-x: auto;">
+        <table class="table table-hover" style="margin: 0; width: 100%; min-width: 800px;">
+          <thead>
+            <tr style="font-size: 12px; color: #64748b; text-transform: uppercase;">
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">Date</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">Source Record</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">Target Record</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">Table</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">User</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr ng-repeat="item in c.data.historyRecords" style="font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 16px 20px; white-space: nowrap;">{{item.created_on}}</td>
+              <td style="padding: 16px 20px; font-weight: 600; color: #0284c7;">{{item.record_number}}</td>
+              <td style="padding: 16px 20px; font-weight: 600; color: #9333ea;">{{item.target_record_number}}</td>
+              <td style="padding: 16px 20px;">{{item.table}}</td>
+              <td style="padding: 16px 20px;">{{item.user}}</td>
+              <td style="padding: 16px 20px;">
+                <span ng-if="item.status.toLowerCase() == 'processing'" style="color: #3b82f6; font-weight: 600;"><i class="fa fa-spinner fa-spin"></i> Processing...</span>
+                <span ng-if="item.status.toLowerCase() == 'success'" style="color: #16a34a; font-weight: 600;"><i class="fa fa-check-circle"></i> Success</span>
+                <span ng-if="item.status.toLowerCase() == 'failed'" style="color: #dc2626; font-weight: 600;"><i class="fa fa-times-circle"></i> Failed</span>
+                <span ng-if="item.status.toLowerCase() != 'success' && item.status.toLowerCase() != 'failed' && item.status.toLowerCase() != 'processing'" style="color: #eab308; font-weight: 600;">{{item.status}}</span>
+              </td>
+            </tr>
+            <tr ng-if="!c.data.historyRecords || c.data.historyRecords.length === 0">
+              <td colspan="6" style="text-align: center; padding: 32px; color: #94a3b8;">No migration history found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; font-size: 13px; color: #64748b;">
+        <span>Showing {{c.data.startIndex}} to {{c.data.endIndex}} of {{c.data.totalRecords}} records</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button class="btn btn-default btn-sm" ng-disabled="c.data.currentPage <= 1 || c.fetchingPage" ng-click="c.changePage(c.data.currentPage - 1)">
+            <i class="fa fa-chevron-left"></i>
+          </button>
+          <span style="font-weight: 500;">Page {{ c.data.currentPage }} of {{ c.data.totalPages }}</span>
+          <button class="btn btn-default btn-sm" ng-disabled="c.data.currentPage >= c.data.totalPages || c.fetchingPage" ng-click="c.changePage(c.data.currentPage + 1)">
+            <i class="fa fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div ng-if="c.activeTab == 'export'" class="tn-fade-in">
+      
+      <div style="display: flex; justify-content: flex-end; padding: 12px 20px; border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
+        <button class="btn btn-default btn-sm" ng-click="c.refreshExports()" ng-disabled="c.isRefreshingExports" style="font-size: 12px; border-radius: 4px; display: flex; align-items: center; gap: 6px; color: #475569; border-color: #cbd5e1; background-color: #ffffff;">
+          <i class="fa fa-refresh" ng-class="{'fa-spin': c.isRefreshingExports}"></i> 
+          {{ c.isRefreshingExports ? 'Refreshing...' : 'Refresh Status' }}
+        </button>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="table table-hover" style="margin: 0; width: 100%; min-width: 800px;">
+          <thead>
+            <tr style="font-size: 12px; color: #64748b; text-transform: uppercase;">
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0; width: 15%;">Date</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0; width: 45%;">Source Records</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0; width: 25%;">Status</th>
+              <th style="padding: 16px 20px; border-bottom: 2px solid #e2e8f0; width: 15%;">Download</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr ng-repeat="file in c.data.exportFiles" style="font-size: 14px; border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 16px 20px; color: #475569; white-space: nowrap;">{{file.created_on}}</td>
+              
+              <td style="padding: 16px 20px; font-weight: 600; color: #0f172a; max-width: 350px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{file.record_number}}">
+                {{file.record_number}} 
+                <span style="font-size: 12px; color: #94a3b8; font-weight: 400; margin-left: 8px;">({{file.table}})</span>
+              </td>
+              
+              <td style="padding: 16px 20px; width: 250px;">
+                <div ng-if="file.status.toLowerCase() == 'processing'" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="color: #3b82f6; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                      <i class="fa fa-spinner fa-spin"></i>
+                      <span>Processing... ({{file.percent}}%)</span>
+                      <span style="color: #64748b; font-weight: 400; font-size: 12px; margin-left: 4px;" ng-if="file.eta_text">{{file.eta_text}}</span>
+                    </div>
+                    <button class="btn btn-default btn-sm" ng-click="c.cancelExport(file.sys_id)" style="color: #dc2626; border: 1px solid #fca5a5; background: #fef2f2; padding: 2px 6px; border-radius: 4px; line-height: 1;" title="Cancel Export">
+                      <i class="fa fa-times"></i>
+                    </button>
+                  </div>
+                  <div style="width: 100%; background-color: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
+                    <div style="height: 100%; background-color: #3b82f6; transition: width 1.5s ease-in-out;" ng-style="{'width': file.percent + '%'}"></div>
+                  </div>
+                </div>
+                
+                <span ng-if="file.status.toLowerCase() == 'success'" style="color: #16a34a; font-weight: 600;"><i class="fa fa-check-circle"></i> Success</span>
+                <span ng-if="file.status.toLowerCase() == 'failed'" style="color: #dc2626; font-weight: 600;"><i class="fa fa-times-circle"></i> Failed</span>
+                <span ng-if="file.status.toLowerCase() == 'cancelled'" style="color: #64748b; font-weight: 600;"><i class="fa fa-ban"></i> Cancelled</span>
+                
+                <span ng-if="file.status.toLowerCase() != 'processing' && file.status.toLowerCase() != 'success' && file.status.toLowerCase() != 'failed' && file.status.toLowerCase() != 'cancelled'" style="color: #eab308; font-weight: 600;">
+                  <i class="fa fa-circle-o"></i> {{file.status}}
+                </span>
+              </td>
+
+              <td style="padding: 16px 20px;">
+                <a ng-if="file.attachment_id" href="/sys_attachment.do?sys_id={{file.attachment_id}}" target="_blank" class="tn-btn-download">
+                  <i class="fa fa-download"></i> XML File
+                </a>
+                <span ng-if="!file.attachment_id && file.status.toLowerCase() == 'processing'" style="color: #94a3b8; font-size: 12px; font-style: italic;">Waiting...</span>
+                <span ng-if="!file.attachment_id && file.status.toLowerCase() == 'failed'" style="color: #dc2626; font-size: 12px;">Error</span>
+                <span ng-if="!file.attachment_id && file.status.toLowerCase() == 'cancelled'" style="color: #64748b; font-size: 12px;">Aborted</span>
+                
+                <span ng-if="!file.attachment_id && file.status.toLowerCase() != 'processing' && file.status.toLowerCase() != 'failed' && file.status.toLowerCase() != 'cancelled'" style="color: #94a3b8; font-size: 12px; font-style: italic;">
+                  No File
+                </span>
+              </td>
+            </tr>
+            <tr ng-if="!c.data.exportFiles || c.data.exportFiles.length === 0">
+              <td colspan="4" style="text-align: center; padding: 40px; color: #94a3b8;">No recent exports found. Use Browse Tables to export records.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_1862238_tracenow.dm_export</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>dm_export</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var dm_export = Class.create();
+dm_export.prototype = {
+    initialize: function() {
+        this._exportedKeys     = {}; 
+        this._cacheHierarchy   = {};
+        this._cacheDictFields  = {};
+        this._cacheRelated     = {}; 
+        this._currentJobGr     = null;
+        this._isSingleRecord   = false;
+        
+        this.MAX_DEPTH             = 10; 
+        
+        this.BOUNDARY_TABLES = [
+            'sys_user', 'sys_user_group', 'sys_user_role', 'cmn_location', 
+            'cmn_department', 'core_company', 'cmdb_ci', 'sys_domain',
+            'cmdb_ci_service'
+        ];
+        
+        this.LEAF_TABLES = [
+            'sys_email', 'sys_audit', 'sys_audit_relation', 'sys_journal_field', 
+            'sys_attachment', 'sys_attachment_doc', 'task_sla', 'sys_watermark', 
+            'sysevent', 'sys_email_log', 'sys_email_attachment'
+        ];
+
+        this.ENABLE_DYNAMIC_DISCOVERY = true;  
+        this.DISCOVER_DOC_ID          = true;  
+        this.DYNAMIC_MAX_DEPTH        = 2;     
+        
+        this.INCLUDE_ATTACHMENTS   = true;  
+        this.INCLUDE_AUDITS        = true;  
+        this.INCLUDE_EMAILS        = true;  
+        
+        this.MAX_RELATED_RECORDS   = 500;  
+        this.MAX_ACTIVITY_ROWS     = 2000; 
+
+        this.xmlPayload = [];
+        this.xmlPayload.push('<?xml version="1.0" encoding="UTF-8"?>');
+        this.xmlPayload.push('<unload unload_date="' + new GlideDateTime().getValue() + '">');
+
+        this.M2M_DEFINITIONS = [
+            { table: "task_rel_task", fields: [{ field: "parent", refTable: "task" }, { field: "child", refTable: "task" }] },
+            { table: "task_ci", fields: [{ field: "task", refTable: "task" }, { field: "ci_item", refTable: "cmdb_ci" }] },
+            { table: "task_cmdb_ci_service", fields: [{ field: "task", refTable: "task" }, { field: "cmdb_ci_service", refTable: "cmdb_ci_service" }] },
+            { table: "sysapproval_approver", fields: [{ field: "sysapproval", refTable: "task" }] }
+        ];
+    },
+
+    _isNoiseTable: function(tableName) {
+        if (!tableName) return true;
+        var t = String(tableName).toLowerCase();
+        return (
+            t.indexOf("sys_dictionary") === 0 || t.indexOf("sys_db_object") === 0 ||
+            t.indexOf("sys_choice") === 0 || t.indexOf("sn_ex_sp_notifs_") === 0 ||
+            t.indexOf("sys_hub_") === 0 || t.indexOf("sys_flow_") === 0 ||
+            t.indexOf("sys_notification") === 0 || t.indexOf("ui_notification") === 0 ||
+            t.indexOf("sys_trigger") === 0 || t.indexOf("sysauto") === 0 ||
+            t.indexOf("v_") === 0 || t.indexOf("ts_") === 0 || t.indexOf("ecc_") === 0 ||
+            t.indexOf("syslog") === 0 || t.indexOf("sysevent") === 0 ||
+            t.indexOf("wf_context") === 0 || t.indexOf("metric_instance") === 0 ||
+            t.indexOf("sla_timer") === 0 // NEW: Ignore SLA configuration maps
+        );
+    },
+
+    exportToXML: function(table, sysIds) {
+        if (!sysIds || sysIds.length === 0) return "";
+        for (var i = 0; i < sysIds.length; i++) {
+            var sysId = String(sysIds[i]).trim();
+            if (!sysId) continue;
+            this._runExportEngine(table, sysId, 0);
+        }
+        return this.xmlPayload.join('\n');
+    },
+
+    _updateProgress: function(pct) {
+        if (this._currentJobGr && this._currentJobGr.isValidRecord()) {
+            this._currentJobGr.setValue('percent_complete', pct);
+            this._currentJobGr.update();
+        }
+    },
+
+    exportToAttachment: function(table, sysIdsStr, exportJobSysId) {
+        var sysIds = sysIdsStr.split(',');
+        var total = sysIds.length;
+        
+        // Bind the job record to the class so the engine can report real-time checkpoints
+        this._currentJobGr = new GlideRecord('x_1862238_tracenow_export_job');
+        if (!this._currentJobGr.get(exportJobSysId)) {
+            this._currentJobGr = null;
+        }
+
+        // If it's a single record, we use granular engine phases. Otherwise, we chunk by record.
+        this._isSingleRecord = (total === 1);
+
+        for (var i = 0; i < total; i++) {
+            if (this._currentJobGr && this._currentJobGr.getValue('status') === 'Cancelled') return; 
+
+            var sysId = String(sysIds[i]).trim();
+            if (!sysId) continue;
+            
+            this._runExportEngine(table, sysId, 0);
+
+            // Chunked tracking for multi-record exports
+            if (this._currentJobGr && !this._isSingleRecord) {
+                var pct = Math.floor(((i + 1) / total) * 95); 
+                this._updateProgress(pct);
+            }
+        }
+
+        this.xmlPayload.push('</unload>');
+        var xmlString = this.xmlPayload.join('\n');
+
+        if (this._currentJobGr) {
+            if (this._currentJobGr.getValue('status') === 'Cancelled') return;
+
+            if (xmlString) {
+                var gsa = new GlideSysAttachment();
+                gsa.write(this._currentJobGr, table + '_export_' + new GlideDateTime().getNumericValue() + '.xml', 'text/xml', xmlString);
+                this._currentJobGr.setValue('status', 'Success');
+                this._currentJobGr.setValue('percent_complete', 100);
+            } else {
+                this._currentJobGr.setValue('status', 'Failed');
+                this._currentJobGr.setValue('percent_complete', 0);
+            }
+            this._currentJobGr.update();
+        }
+    },
+
+    _runExportEngine: function(table, sysId, depth) {
+        if (depth > this.MAX_DEPTH) return;
+        if (this._isNoiseTable(table)) return; 
+        
+        var key = table + "_" + sysId;
+        if (this._exportedKeys[key]) return; 
+        
+        try {
+            var gr = new GlideRecordSecure(table);
+            if (!gr.get(sysId)) return;
+            
+            this._exportedKeys[key] = true;
+
+            // Track UI progress ONLY for the top-level main record
+            var isTopLevel = (depth === 0 && this._isSingleRecord);
+
+            if (isTopLevel) this._updateProgress(10); // Checkpoint 1
+
+            this._exportWithDependencies(gr, table, depth);
+            
+            if (isTopLevel) this._updateProgress(30); // Checkpoint 2
+
+            var isBoundary = (this.BOUNDARY_TABLES.indexOf(table) !== -1);
+            var isLeaf = (this.LEAF_TABLES.indexOf(table) !== -1);
+
+            if (!isBoundary && !isLeaf) {
+                
+                if (this.ENABLE_DYNAMIC_DISCOVERY && depth <= this.DYNAMIC_MAX_DEPTH) {
+                    this._exportDynamicRelatedLists(table, sysId, depth);
+                }
+                
+                if (isTopLevel) this._updateProgress(50); // Checkpoint 3
+                
+                this._exportM2MRelations(table, sysId, depth);
+                
+                if (this.DISCOVER_DOC_ID && depth <= this.DYNAMIC_MAX_DEPTH) {
+                    this._exportDocumentIdRelations(table, sysId, depth);
+                }
+                
+                if (isTopLevel) this._updateProgress(65); // Checkpoint 4
+                
+                if (this.INCLUDE_ATTACHMENTS) this._exportAttachments(table, sysId);
+                
+                if (isTopLevel) this._updateProgress(80); // Checkpoint 5
+                
+                this._exportSLAs(sysId, depth);
+                this._exportActivityStream(table, sysId, depth);
+                
+                if (isTopLevel) this._updateProgress(95); // Checkpoint 6
+            }
+        } catch (ignore) {}
+    },
+
+    // ... [The rest of the helper functions remain exactly the same as the previous version] ...
+    _exportWithDependencies: function(gr, table, depth) {
+        var fields = this._getFieldsForTable(table);
+        for (var i = 0; i < fields.length; i++) {
+            var f = fields[i];
+            if (f.type === 'reference' && f.refTable) {
+                var refVal = gr.getValue(f.name);
+                if (refVal) this._runExportEngine(f.refTable, refVal, depth + 1);
+            }
+        }
+        this._buildRecordXML(gr, table, fields);
+    },
+    _exportDynamicRelatedLists: function(table, sysId, depth) {
+        if (this._cacheRelated[table] === undefined) {
+            var refs = [];
+            var hierarchy = this._getTableHierarchy(table); 
+            try {
+                var dict = new GlideRecord('sys_dictionary');
+                dict.addQuery('reference', 'IN', hierarchy.join(',')); 
+                dict.addQuery('internal_type', 'reference');
+                dict.query();
+                while(dict.next()) refs.push({ table: dict.getValue('name'), field: dict.getValue('element') });
+            } catch(ignore) {}
+            this._cacheRelated[table] = refs;
+        }
+        var relations = this._cacheRelated[table];
+        for (var i = 0; i < relations.length; i++) {
+            var relTable = relations[i].table;
+            var relField = relations[i].field;
+            if (this._isNoiseTable(relTable)) continue;
+            this._exportQuery(relTable, relField, sysId, depth, null, null, this.MAX_RELATED_RECORDS);
+        }
+    },
+    _exportM2MRelations: function(table, sysId, depth) {
+        for (var m = 0; m < this.M2M_DEFINITIONS.length; m++) {
+            var def = this.M2M_DEFINITIONS[m];
+            for (var fi = 0; fi < def.fields.length; fi++) {
+                var fieldDef = def.fields[fi];
+                if (fieldDef.refTable === table || this._isTaskDerived(table)) {
+                    this._exportQuery(def.table, fieldDef.field, sysId, depth, null, null, this.MAX_RELATED_RECORDS);
+                }
+            }
+        }
+    },
+    _exportDocumentIdRelations: function(table, sysId, depth) {
+        try {
+            var dict = new GlideRecordSecure('sys_dictionary');
+            dict.addQuery('internal_type', 'document_id');
+            dict.query();
+            while (dict.next()) {
+                var childTable = dict.getValue('name');
+                var refField = dict.getValue('element');
+                if (this._isNoiseTable(childTable) || !refField) continue;
+                this._exportQuery(childTable, refField, sysId, depth, null, null, this.MAX_RELATED_RECORDS);
+            }
+        } catch (ignore) {}
+    },
+    _exportAttachments: function(parentTable, parentSysId) {
+        try {
+            var att = new GlideRecordSecure("sys_attachment");
+            att.addQuery("table_sys_id", parentSysId);
+            att.addQuery("table_name", parentTable);
+            att.query(); 
+            var gsa = new GlideSysAttachment();
+            while (att.next()) {
+                var attId = att.getUniqueValue();
+                var key = "sys_attachment_" + attId;
+                if (this._exportedKeys[key]) continue;
+                this._exportedKeys[key] = true;
+                var fields = this._getFieldsForTable("sys_attachment");
+                this.xmlPayload.push('  <sys_attachment action="INSERT_OR_UPDATE">');
+                for (var i = 0; i < fields.length; i++) {
+                    var fName = fields[i].name;
+                    var fVal = att.getValue(fName);
+                    this.xmlPayload.push(fVal ? '    <' + fName + '>' + this._escapeXML(fVal) + '</' + fName + '>' : '    <' + fName + '/>');
+                }
+                try {
+                    var base64Data = gsa.getContentBase64(att);
+                    if (base64Data) this.xmlPayload.push('    <payload>' + base64Data + '</payload>');
+                } catch(ignore) {}
+                this.xmlPayload.push('  </sys_attachment>');
+            }
+        } catch(ignore) {}
+    },
+
+exportMixedToAttachment: function(itemsJsonStr, exportJobSysId) {
+        var items = JSON.parse(itemsJsonStr);
+        var total = items.length;
+        
+        // Bind the job record to the class so the engine can report real-time checkpoints
+        this._currentJobGr = new GlideRecord('x_1862238_tracenow_export_job');
+        if (!this._currentJobGr.get(exportJobSysId)) {
+            this._currentJobGr = null;
+        }
+
+        this._isSingleRecord = (total === 1);
+
+        for (var i = 0; i < total; i++) {
+            if (this._currentJobGr && this._currentJobGr.getValue('status') === 'Cancelled') return; 
+
+            var sysId = String(items[i].sys_id).trim();
+            var table = String(items[i].table).trim();
+            if (!sysId || !table) continue;
+            
+            // Fire the engine for this specific record and its specific table
+            this._runExportEngine(table, sysId, 0);
+
+            // Chunked tracking for multi-record exports
+            if (this._currentJobGr && !this._isSingleRecord) {
+                var pct = Math.floor(((i + 1) / total) * 95); 
+                this._updateProgress(pct);
+            }
+        }
+
+        this.xmlPayload.push('</unload>');
+        var xmlString = this.xmlPayload.join('\n');
+
+        if (this._currentJobGr) {
+            if (this._currentJobGr.getValue('status') === 'Cancelled') return;
+
+            if (xmlString) {
+                var gsa = new GlideSysAttachment();
+                // Name the file generically since it contains multiple tables
+                gsa.write(this._currentJobGr, 'tracenow_mixed_export_' + new GlideDateTime().getNumericValue() + '.xml', 'text/xml', xmlString);
+                this._currentJobGr.setValue('status', 'Success');
+                this._currentJobGr.setValue('percent_complete', 100);
+            } else {
+                this._currentJobGr.setValue('status', 'Failed');
+                this._currentJobGr.setValue('percent_complete', 0);
+            }
+            this._currentJobGr.update();
+        }
+    },
+
+
+
+
+    _exportSLAs: function(sysId, depth) {
+        this._exportQuery("task_sla", "task", sysId, depth, null, null, this.MAX_RELATED_RECORDS);
+    },
+    _exportActivityStream: function(table, sysId, depth) {
+        this._exportQuery("sys_journal_field", "element_id", sysId, depth, "name", table, this.MAX_ACTIVITY_ROWS);
+        if (this.INCLUDE_AUDITS) {
+            this._exportQuery("sys_audit", "documentkey", sysId, depth, "tablename", table, this.MAX_ACTIVITY_ROWS);
+            this._exportQuery("sys_audit_relation", "documentkey", sysId, depth, null, null, this.MAX_ACTIVITY_ROWS);
+        }
+        if (this.INCLUDE_EMAILS) {
+            this._exportQuery("sys_email", "instance", sysId, depth, null, null, this.MAX_ACTIVITY_ROWS);
+        }
+    },
+    _exportQuery: function(childTable, refField, parentSysId, depth, secondaryField, secondaryVal, limitParam) {
+        if (this._isNoiseTable(childTable)) return;
+        try {
+            var gr = new GlideRecordSecure(childTable);
+            gr.addQuery(refField, parentSysId);
+            if (secondaryField && secondaryVal) gr.addQuery(secondaryField, secondaryVal);
+            if (limitParam) gr.setLimit(limitParam); 
+            gr.query();
+            while (gr.next()) this._runExportEngine(childTable, gr.getUniqueValue(), depth + 1);
+        } catch (ignore) {}
+    },
+    _buildRecordXML: function(gr, table, fields) {
+        this.xmlPayload.push('  <' + table + ' action="INSERT_OR_UPDATE">');
+        for (var i = 0; i < fields.length; i++) {
+            var fName = fields[i].name;
+            var fVal = gr.getValue(fName);
+            if (fVal !== null && fVal !== undefined && fVal !== '') {
+                var displayVal = fields[i].type === 'reference' ? ' display_value="' + this._escapeXML(gr.getDisplayValue(fName)) + '"' : '';
+                this.xmlPayload.push('    <' + fName + displayVal + '>' + this._escapeXML(fVal) + '</' + fName + '>');
+            } else {
+                this.xmlPayload.push('    <' + fName + '/>');
+            }
+        }
+        this.xmlPayload.push('  </' + table + '>');
+    },
+    _getFieldsForTable: function(table) {
+        if (this._cacheDictFields[table]) return this._cacheDictFields[table];
+        var hierarchy = this._getTableHierarchy(table);
+        var fields = [];
+        var seen = {};
+        try {
+            var dict = new GlideRecord('sys_dictionary');
+            dict.addQuery('name', 'IN', hierarchy.join(','));
+            dict.addQuery('internal_type', '!=', 'collection'); 
+            dict.orderBy('element');
+            dict.query();
+            while (dict.next()) {
+                var eName = dict.getValue('element');
+                if (!eName || seen[eName]) continue;
+                seen[eName] = true;
+                fields.push({ name: eName, type: dict.getValue('internal_type'), refTable: dict.getValue('reference') || '' });
+            }
+        } catch(ignore) {}
+        this._cacheDictFields[table] = fields;
+        return fields;
+    },
+    _getTableHierarchy: function(table) {
+        if (this._cacheHierarchy[table]) return this._cacheHierarchy[table];
+        var chain = [];
+        try {
+            var dbObj = new GlideRecord('sys_db_object');
+            dbObj.addQuery('name', table);
+            dbObj.query();
+            if (dbObj.next()) {
+                chain.push(dbObj.getValue('name'));
+                var currentExtends = dbObj.super_class;
+                while (currentExtends) {
+                    var parentDb = new GlideRecord('sys_db_object');
+                    if (parentDb.get(currentExtends)) {
+                        chain.push(parentDb.getValue('name'));
+                        currentExtends = parentDb.super_class;
+                    } else { currentExtends = null; }
+                }
+            } else { chain.push(table); }
+        } catch(ignore) { chain.push(table); }
+        this._cacheHierarchy[table] = chain;
+        return chain;
+    },
+    _isTaskDerived: function(table) {
+        return this._getTableHierarchy(table).indexOf("task") !== -1;
+    },
+    _escapeXML: function(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    },
+    type: 'dm_export'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-10 07:34:10</sys_created_on>
+        <sys_id>f4d4210bc311031093c8b71d05013169</sys_id>
+        <sys_mod_count>18</sys_mod_count>
+        <sys_name>dm_export</sys_name>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sys_script_include_f4d4210bc311031093c8b71d05013169</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-17 08:35:13</sys_updated_on>
+    </sys_script_include>
+</record_update>
