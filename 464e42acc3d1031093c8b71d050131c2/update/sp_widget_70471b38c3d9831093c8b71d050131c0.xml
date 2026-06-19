@@ -696,7 +696,7 @@ if (input.action === 'run_migration' && input.groups) {
     }
 }
 
-// --- 5. ASYNC EXPORT HANDLER (Trigger Logic Intact) ---
+// --- 5. ASYNC EXPORT HANDLER (Event Registry Logic) ---
 if (input && input.action === 'export_async' && input.sysIds) {
     var job = new GlideRecord('x_1862238_tracenow_export_job');
     job.initialize();
@@ -714,8 +714,8 @@ if (input && input.action === 'export_async' && input.sysIds) {
     job.record_number = recordNumbers.join(', ');
     var jobId = job.insert();
 
-    var bridge = new global.TraceNowGlobalBridge();
-    bridge.startAsyncExport(input.tableName, input.sysIds.join(','), jobId);
+    // The Fix: Use ServiceNow's native scoped event queue instead of the Global Bridge
+   gs.eventQueue('x_1862238_tracenow.tracenow.start_export', job, input.tableName, input.sysIds.join(','));
     
     data.asyncSuccess = true;
     return;
@@ -727,14 +727,14 @@ if (input && input.action === 'export_async' && input.sysIds) {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-06-03 16:06:44</sys_created_on>
         <sys_id>70471b38c3d9831093c8b71d050131c0</sys_id>
-        <sys_mod_count>69</sys_mod_count>
+        <sys_mod_count>71</sys_mod_count>
         <sys_name>TraceNow Record Browser</sys_name>
         <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
         <sys_policy/>
         <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
         <sys_update_name>sp_widget_70471b38c3d9831093c8b71d050131c0</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-06-11 08:56:12</sys_updated_on>
+        <sys_updated_on>2026-06-18 12:41:58</sys_updated_on>
         <template><![CDATA[<div class="tn-records-wrapper">
   <div ng-if="c.data.error" class="alert alert-warning tn-alert">
     <i class="fa fa-exclamation-triangle"></i> {{c.data.error}}

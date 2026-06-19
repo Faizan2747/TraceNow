@@ -508,11 +508,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed !important; }</css>
             var rawTargetUrl = actionSource.source_instance_url ? actionSource.source_instance_url.toString().trim() : '';
             if (rawTargetUrl.endsWith('/')) { rawTargetUrl = rawTargetUrl.substring(0, rawTargetUrl.length - 1); }
             
-            var localSysUrl = gs.getProperty('glide.servlet.uri', '');
-            if (normalizeUrl(rawTargetUrl) === normalizeUrl(localSysUrl)) {
-                data.status = 'error'; data.error = "You cannot add the local instance as a remote connection.";
-                compileConnectionGrid(); return;
-            }
+            // LOCAL URL CHECK HAS BEEN REMOVED FROM HERE!
 
             var dupGR = new GlideRecord('x_1862238_tracenow_connections');
             dupGR.query();
@@ -579,14 +575,14 @@ button:disabled { opacity: 0.6; cursor: not-allowed !important; }</css>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-06-03 09:56:30</sys_created_on>
         <sys_id>ac32cab4c351831093c8b71d05013182</sys_id>
-        <sys_mod_count>35</sys_mod_count>
+        <sys_mod_count>36</sys_mod_count>
         <sys_name>TraceNow Connections</sys_name>
         <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
         <sys_policy/>
         <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
         <sys_update_name>sp_widget_ac32cab4c351831093c8b71d05013182</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-06-09 10:45:06</sys_updated_on>
+        <sys_updated_on>2026-06-18 16:30:30</sys_updated_on>
         <template><![CDATA[<div class="tn-connections-wrapper">
   <div class="tn-header-row">
     <div class="tn-title-block">

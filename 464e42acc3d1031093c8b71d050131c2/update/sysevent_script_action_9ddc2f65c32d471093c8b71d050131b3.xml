@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sysevent_script_action">
+    <sysevent_script_action action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <condition_script/>
+        <description/>
+        <event_name>x_1862238_tracenow.tracenow.start_export</event_name>
+        <name>TraceNow Async Export Worker</name>
+        <order>100</order>
+        <script><![CDATA[// This runs asynchronously in the background when the event fires!
+
+// THE FIX: We must force ServiceNow to convert the Java objects to JS Strings
+var tableName = String(event.parm1); 
+var sysIdsStr = String(event.parm2);
+var jobSysId  = String(event.instance);
+
+var exporter = new x_1862238_tracenow.dm_export(); 
+
+// Now this strict equality will work perfectly!
+if (tableName === 'mixed_payload') {
+    exporter.exportMixedToAttachment(sysIdsStr, jobSysId);
+} else {
+    exporter.exportToAttachment(tableName, sysIdsStr, jobSysId);
+}]]></script>
+        <synchronous>false</synchronous>
+        <sys_class_name>sysevent_script_action</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-06-18 11:53:10</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>9ddc2f65c32d471093c8b71d050131b3</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>TraceNow Async Export Worker</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="TraceNow" source="x_1862238_tracenow">464e42acc3d1031093c8b71d050131c2</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TraceNow">464e42acc3d1031093c8b71d050131c2</sys_scope>
+        <sys_update_name>sysevent_script_action_9ddc2f65c32d471093c8b71d050131b3</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-06-18 13:05:01</sys_updated_on>
+    </sysevent_script_action>
+</record_update>
